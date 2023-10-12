@@ -56,7 +56,6 @@ impl KvStore {
 
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
         self.build_index();
-        println!("{:?}", self.index);
 
         if let Some(info) = self.index.get(&key) {
             let reader = &mut self.reader;
@@ -69,22 +68,20 @@ impl KvStore {
                 Err(failure::err_msg("invalid value"))
             }
         } else {
-            Err(failure::err_msg("Key not found"))
+            Ok(None)
         }
     }
 
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         let pos = self.writer.seek(SeekFrom::End(0))?;
-        let mut writer = &mut self.writer;
+        let writer = &mut self.writer;
         let kv_pair = KVPair {
             key: key.clone(),
             value: value.clone(),
         };
         let kv_pair_serialized = serde_json::to_string(&kv_pair)?;
 
-        let buf = u64::to_be_bytes(kv_pair_serialized.len() as u64);
-
-        write!(writer, "{:?}", buf)?;
+        writer.write_u64::<BigEndian>(kv_pair_serialized.len() as u64)?;
         write!(writer, "{}", kv_pair_serialized)?;
 
         self.writer.flush()?;
@@ -113,24 +110,15 @@ impl KvStore {
         self.index = HashMap::new();
         let mut pos = 0;
         let lastpos = self.writer.seek(SeekFrom::End(0))?;
-        println!("lastpos: {}", lastpos);
 
         while pos < lastpos {
             reader.seek(SeekFrom::Start(pos))?;
 
-            let mut buf = [0; 8];
-            println!("pos1");
-            reader.take(8).read(&mut buf)?;
-            println!("pos2 {:?}", buf);
-            let sz = u64::from_be_bytes(buf);
-            println!("pos3 {}", sz);
+            let sz = reader.read_u64::<BigEndian>().unwrap();
 
             reader.seek(SeekFrom::Start(pos + 8))?;
-            println!("pos4-1");
             let mut buf = vec![0; sz as usize];
-            println!("pos4");
             reader.read_exact(&mut buf)?;
-            println!("pos5");
             let kvpair: KVPair = serde_json::from_slice(&buf)?;
 
             self.index.insert(
@@ -149,8 +137,6 @@ impl KvStore {
             }
 
             pos += 8 + sz;
-            println!("pos: {}", pos);
-            println!("{:?}", kvpair);
         }
 
         Ok(())

@@ -64,12 +64,15 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
 
-            let value = kv.get(args.key.clone())?;
-            // .unwrap_or_else(|_| {
-            //     println!("Key not found");
-            //     std::process::exit(0);
-            // });
-            println!("{:?}", value.unwrap());
+            if let Ok(value) = kv.get(args.key.clone()) {
+                match value {
+                    Some(value) => println!("{}", value),
+                    None => {
+                        println!("Key not found");
+                        std::process::exit(0);
+                    }
+                }
+            }
             Ok(())
         }
         Some(Commands::Set(args)) => {
