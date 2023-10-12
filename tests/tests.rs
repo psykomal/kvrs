@@ -25,7 +25,7 @@ fn cli_version() {
 // `kvs get <KEY>` should print "Key not found" for a non-existent key and exit with zero.
 #[test]
 fn cli_get_non_existent_key() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unable to create temporary working directory");
     Command::cargo_bin("kvs")
         .unwrap()
         .args(&["get", "key1"])

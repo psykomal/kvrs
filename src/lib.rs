@@ -1,9 +1,13 @@
 extern crate failure;
 extern crate serde_json;
 
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use bytes::{BufMut, BytesMut};
 use failure::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::Deserializer;
+use std::fs::{self, OpenOptions};
+use std::io::Cursor;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::{collections::HashMap, fs::File, path::PathBuf};
 
@@ -33,16 +37,26 @@ struct KVPair {
 impl KvStore {
     pub fn open(path: impl Into<PathBuf>) -> Result<KvStore> {
         let path = path.into();
+        fs::create_dir_all(&path)?;
+
+        let file_path = path.join("kv.dat");
 
         Ok(KvStore {
             index: HashMap::new(),
-            writer: BufWriter::new(File::create(&path)?),
-            reader: BufReader::new(File::open(&path)?),
+            writer: BufWriter::new(
+                OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .create(true)
+                    .open(&file_path)?,
+            ),
+            reader: BufReader::new(OpenOptions::new().read(true).open(&file_path)?),
         })
     }
 
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
         self.build_index();
+        println!("{:?}", self.index);
 
         if let Some(info) = self.index.get(&key) {
             let reader = &mut self.reader;
@@ -55,7 +69,7 @@ impl KvStore {
                 Err(failure::err_msg("invalid value"))
             }
         } else {
-            Ok(None)
+            Err(failure::err_msg("Key not found"))
         }
     }
 
@@ -68,13 +82,9 @@ impl KvStore {
         };
         let kv_pair_serialized = serde_json::to_string(&kv_pair)?;
 
-        let sizeinfo = SizeInfo {
-            start: pos,
-            size: kv_pair_serialized.len() as u64,
-        };
-        let sizeinfo_serialized = serde_json::to_string(&sizeinfo)?;
+        let buf = u64::to_be_bytes(kv_pair_serialized.len() as u64);
 
-        write!(writer, "{}", sizeinfo_serialized)?;
+        write!(writer, "{:?}", buf)?;
         write!(writer, "{}", kv_pair_serialized)?;
 
         self.writer.flush()?;
@@ -103,17 +113,33 @@ impl KvStore {
         self.index = HashMap::new();
         let mut pos = 0;
         let lastpos = self.writer.seek(SeekFrom::End(0))?;
+        println!("lastpos: {}", lastpos);
 
         while pos < lastpos {
             reader.seek(SeekFrom::Start(pos))?;
-            let sz_reader = reader.take(16);
-            let szinfo: SizeInfo = serde_json::from_reader(sz_reader)?;
 
-            reader.seek(SeekFrom::Start(pos + 16))?;
-            let kv_reader = reader.take(szinfo.size);
-            let kvpair: KVPair = serde_json::from_reader(kv_reader)?;
+            let mut buf = [0; 8];
+            println!("pos1");
+            reader.take(8).read(&mut buf)?;
+            println!("pos2 {:?}", buf);
+            let sz = u64::from_be_bytes(buf);
+            println!("pos3 {}", sz);
 
-            self.index.insert(kvpair.key.clone(), szinfo);
+            reader.seek(SeekFrom::Start(pos + 8))?;
+            println!("pos4-1");
+            let mut buf = vec![0; sz as usize];
+            println!("pos4");
+            reader.read_exact(&mut buf)?;
+            println!("pos5");
+            let kvpair: KVPair = serde_json::from_slice(&buf)?;
+
+            self.index.insert(
+                kvpair.key.clone(),
+                SizeInfo {
+                    start: pos + 8,
+                    size: sz,
+                },
+            );
 
             if kvpair.value == "rm".to_string() {
                 if let Some(_) = self.index.remove(&kvpair.key) {
@@ -122,7 +148,9 @@ impl KvStore {
                 }
             }
 
-            pos += 16 + szinfo.size;
+            pos += 8 + sz;
+            println!("pos: {}", pos);
+            println!("{:?}", kvpair);
         }
 
         Ok(())
