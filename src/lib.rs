@@ -6,6 +6,7 @@ use bytes::{BufMut, BytesMut};
 use failure::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::Deserializer;
+use std::default;
 use std::fs::{self, OpenOptions};
 use std::io::Cursor;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
@@ -41,7 +42,7 @@ impl KvStore {
 
         let file_path = path.join("kv.dat");
 
-        Ok(KvStore {
+        let mut kvstore = KvStore {
             index: HashMap::new(),
             writer: BufWriter::new(
                 OpenOptions::new()
@@ -51,21 +52,26 @@ impl KvStore {
                     .open(&file_path)?,
             ),
             reader: BufReader::new(OpenOptions::new().read(true).open(&file_path)?),
-        })
+        };
+
+        kvstore.build_index()?;
+
+        return Ok(kvstore);
     }
 
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        self.build_index();
+        // println!("{:?}", self.index);
 
         if let Some(info) = self.index.get(&key) {
             let reader = &mut self.reader;
             reader.seek(SeekFrom::Start(info.start))?;
             let cmd_reader = reader.take(info.size);
+            // println!("start {:?} infosize {:?}", info.start, info.size);
 
-            if let KVPair { value, .. } = serde_json::from_reader(cmd_reader)? {
-                Ok(Some(value))
-            } else {
-                Err(failure::err_msg("invalid value"))
+            let KVPair { value, .. } = serde_json::from_reader(cmd_reader).unwrap();
+            match value.as_str() {
+                "rm" => Ok(None),
+                _ => Ok(Some(value)),
             }
         } else {
             Ok(None)
@@ -88,17 +94,15 @@ impl KvStore {
         self.index.insert(
             key.clone(),
             SizeInfo {
-                start: pos,
-                size: self.writer.seek(SeekFrom::End(0))? - pos,
+                start: pos + 8,
+                size: kv_pair_serialized.len() as u64,
             },
         );
         Ok(())
     }
 
     pub fn remove(&mut self, key: String) -> Result<()> {
-        self.build_index()?;
-
-        if let Some(info) = self.index.remove(&key) {
+        if let Some(_) = self.index.remove(&key) {
             self.set(key, "rm".to_string())
         } else {
             Err(failure::err_msg("Key not found"))
