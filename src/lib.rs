@@ -2,13 +2,9 @@ extern crate failure;
 extern crate serde_json;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use bytes::{BufMut, BytesMut};
 use failure::Error;
 use serde::{Deserialize, Serialize};
-use serde_json::Deserializer;
-use std::default;
 use std::fs::{self, OpenOptions};
-use std::io::Cursor;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::{collections::HashMap, fs::File, path::PathBuf};
 
@@ -17,7 +13,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct KvStore {
     index: HashMap<String, SizeInfo>,
     writer: BufWriter<File>,
-    reader: BufReader<File>,
+    readers: Vec<BufReader<File>>,
 }
 
 /// File format:
@@ -26,6 +22,7 @@ pub struct KvStore {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct SizeInfo {
     start: u64,
+    segment_id: u32,
     size: u64,
 }
 
@@ -40,19 +37,44 @@ impl KvStore {
         let path = path.into();
         fs::create_dir_all(&path)?;
 
-        let file_path = path.join("kv.dat");
+        let mut filepaths = Vec::new();
+
+        match fs::read_dir(path.clone()) {
+            Ok(entries) => {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let file_path = entry.path();
+                        filepaths.push(file_path);
+                    }
+                }
+            }
+            Err(err) => {
+                return Err(err.into());
+            }
+        }
+
+        filepaths.sort();
+
+        if filepaths.len() == 0 {
+            let fname = "kv_1.dat".to_string();
+
+            let file_path = path.join(fname.clone());
+
+            let _ = new_file(file_path.clone()).unwrap();
+
+            filepaths.push(file_path.clone());
+        }
+
+        let readers = get_readers(&filepaths);
+        let writer = get_current_writer(&filepaths);
 
         let mut kvstore = KvStore {
             index: HashMap::new(),
-            writer: BufWriter::new(
-                OpenOptions::new()
-                    .write(true)
-                    .append(true)
-                    .create(true)
-                    .open(&file_path)?,
-            ),
-            reader: BufReader::new(OpenOptions::new().read(true).open(&file_path)?),
+            writer,
+            readers,
         };
+
+        // println!("{:?}", filepaths);
 
         kvstore.build_index()?;
 
@@ -60,13 +82,11 @@ impl KvStore {
     }
 
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        // println!("{:?}", self.index);
-
         if let Some(info) = self.index.get(&key) {
-            let reader = &mut self.reader;
+            let idx = info.segment_id - 1;
+            let reader = &mut self.readers[idx as usize];
             reader.seek(SeekFrom::Start(info.start))?;
             let cmd_reader = reader.take(info.size);
-            // println!("start {:?} infosize {:?}", info.start, info.size);
 
             let KVPair { value, .. } = serde_json::from_reader(cmd_reader).unwrap();
             match value.as_str() {
@@ -95,6 +115,7 @@ impl KvStore {
             key.clone(),
             SizeInfo {
                 start: pos + 8,
+                segment_id: self.readers.len() as u32,
                 size: kv_pair_serialized.len() as u64,
             },
         );
@@ -110,39 +131,79 @@ impl KvStore {
     }
 
     fn build_index(&mut self) -> Result<()> {
-        let reader = &mut self.reader;
         self.index = HashMap::new();
-        let mut pos = 0;
-        let lastpos = self.writer.seek(SeekFrom::End(0))?;
 
-        while pos < lastpos {
-            reader.seek(SeekFrom::Start(pos))?;
+        for (i, reader) in self.readers.iter_mut().enumerate() {
+            let mut pos = 0;
+            let lastpos = reader.seek(SeekFrom::End(0))?;
 
-            let sz = reader.read_u64::<BigEndian>().unwrap();
+            while pos < lastpos {
+                reader.seek(SeekFrom::Start(pos))?;
 
-            reader.seek(SeekFrom::Start(pos + 8))?;
-            let mut buf = vec![0; sz as usize];
-            reader.read_exact(&mut buf)?;
-            let kvpair: KVPair = serde_json::from_slice(&buf)?;
+                let sz = reader.read_u64::<BigEndian>().unwrap();
 
-            self.index.insert(
-                kvpair.key.clone(),
-                SizeInfo {
-                    start: pos + 8,
-                    size: sz,
-                },
-            );
+                reader.seek(SeekFrom::Start(pos + 8))?;
+                let mut buf = vec![0; sz as usize];
+                reader.read_exact(&mut buf)?;
+                let kvpair: KVPair = serde_json::from_slice(&buf)?;
 
-            if kvpair.value == "rm".to_string() {
-                if let Some(_) = self.index.remove(&kvpair.key) {
-                } else {
-                    return Err(failure::err_msg("Couldn't delete key"));
+                self.index.insert(
+                    kvpair.key.clone(),
+                    SizeInfo {
+                        start: pos + 8,
+                        segment_id: (i + 1) as u32,
+                        size: sz,
+                    },
+                );
+
+                if kvpair.value == "rm".to_string() {
+                    if let Some(_) = self.index.remove(&kvpair.key) {
+                    } else {
+                        return Err(failure::err_msg("Couldn't delete key"));
+                    }
                 }
-            }
 
-            pos += 8 + sz;
+                pos += 8 + sz;
+            }
         }
+
+        // println!("{:?}", self.index);
 
         Ok(())
     }
+}
+
+fn new_file(path: PathBuf) -> Result<File> {
+    let file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open(&path)?;
+
+    Ok(file)
+}
+
+fn get_readers(filepaths: &Vec<PathBuf>) -> Vec<BufReader<File>> {
+    let mut readers = Vec::new();
+
+    for filepath in filepaths {
+        let file = File::open(filepath).unwrap();
+        readers.push(BufReader::new(file));
+    }
+
+    readers
+}
+
+fn get_current_writer(filepaths: &Vec<PathBuf>) -> BufWriter<File> {
+    let len = filepaths.len();
+    let file_path = filepaths[len - 1].clone();
+
+    let file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open(&file_path)
+        .unwrap();
+
+    BufWriter::new(file)
 }

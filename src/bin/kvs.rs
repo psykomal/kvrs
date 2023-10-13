@@ -25,6 +25,8 @@ use kvs::Result;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+    #[arg(short, long, default_value = ".")]
+    dir: String,
 }
 
 #[derive(Subcommand)]
@@ -42,21 +44,18 @@ struct Get {
 
 #[derive(Args)]
 struct Set {
-    // #[arg(short, long)]
     key: String,
-    // #[arg(short, long)]
     value: String,
 }
 
 #[derive(Args)]
 struct Rm {
-    // #[arg(short, long)]
     key: String,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut kv = KvStore::open(".")?;
+    let mut kv = KvStore::open(cli.dir)?;
 
     match &cli.command {
         Some(Commands::Get(args)) => {
