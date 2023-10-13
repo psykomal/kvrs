@@ -2,23 +2,6 @@ use ::clap::{Args, Parser, Subcommand};
 use kvs::KvStore;
 use kvs::Result;
 
-// #[derive(Parser, Debug)]
-// struct Cli {
-//     /// The pattern to look for
-//     #[arg(short, long, default_value_t = env!("CARGO_PKG_VERSION").to_string())]
-//     version: String,
-
-//     #[arg(short = 'a', long, default_value_t = env!("CARGO_PKG_AUTHORS").to_string())]
-//     author: String,
-
-//     #[arg(short = 'b', long, default_value_t = env!("CARGO_PKG_DESCRIPTION").to_string())]
-//     about: String,
-
-//     method: String,
-//     key: String,
-//     value: Option<String>,
-// }
-
 #[derive(Parser)]
 #[command(author, version)]
 #[command(about = "KV store")]
@@ -38,7 +21,6 @@ enum Commands {
 
 #[derive(Args)]
 struct Get {
-    // #[arg(short, long)]
     key: String,
 }
 

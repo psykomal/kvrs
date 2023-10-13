@@ -10,10 +10,13 @@ use std::{collections::HashMap, fs::File, path::PathBuf};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+const MAX_SEGMENT_SIZE: u64 = 120;
+
 pub struct KvStore {
     index: HashMap<String, SizeInfo>,
     writer: BufWriter<File>,
     readers: Vec<BufReader<File>>,
+    dir: PathBuf,
 }
 
 /// File format:
@@ -72,6 +75,7 @@ impl KvStore {
             index: HashMap::new(),
             writer,
             readers,
+            dir: path,
         };
 
         // println!("{:?}", filepaths);
@@ -100,6 +104,17 @@ impl KvStore {
 
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         let pos = self.writer.seek(SeekFrom::End(0))?;
+
+        if pos >= MAX_SEGMENT_SIZE {
+            let fname = format!("kv_{}.dat", self.readers.len() + 1);
+            let file_path = self.dir.join(fname);
+            let file = new_file(file_path.clone()).unwrap();
+            self.readers.push(BufReader::new(file));
+            self.writer = get_writer(file_path);
+        }
+
+        // println!("pos: {}", pos);
+
         let writer = &mut self.writer;
         let kv_pair = KVPair {
             key: key.clone(),
@@ -198,11 +213,15 @@ fn get_current_writer(filepaths: &Vec<PathBuf>) -> BufWriter<File> {
     let len = filepaths.len();
     let file_path = filepaths[len - 1].clone();
 
+    get_writer(file_path)
+}
+
+fn get_writer(path: PathBuf) -> BufWriter<File> {
     let file = OpenOptions::new()
         .write(true)
         .append(true)
         .create(true)
-        .open(&file_path)
+        .open(&path)
         .unwrap();
 
     BufWriter::new(file)
