@@ -10,17 +10,21 @@ use std::{collections::HashMap, fs::File, path::PathBuf};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-const MAX_SEGMENT_SIZE: u64 = 120;
+const INITIAL_MAX_SEGMENT_SIZE: u64 = 120;
+const NUM_SEGMENTS_COMPACTION_THREASHOLD: u32 = 4;
 
 pub struct KvStore {
     index: HashMap<String, SizeInfo>,
     writer: BufWriter<File>,
     readers: Vec<BufReader<File>>,
     dir: PathBuf,
+    rwmutex: std::sync::RwLock<()>,
+    max_segment_size: u64,
+    num_segments: u32,
 }
 
 /// File format:
-/// start | size | key | value
+/// size | struct{key, value}
 ///
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct SizeInfo {
@@ -40,26 +44,12 @@ impl KvStore {
         let path = path.into();
         fs::create_dir_all(&path)?;
 
-        let mut filepaths = Vec::new();
+        let mut filepaths = get_file_paths(path.clone());
 
-        match fs::read_dir(path.clone()) {
-            Ok(entries) => {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        let file_path = entry.path();
-                        filepaths.push(file_path);
-                    }
-                }
-            }
-            Err(err) => {
-                return Err(err.into());
-            }
-        }
-
-        filepaths.sort();
+        let prefix = "".to_string();
 
         if filepaths.len() == 0 {
-            let fname = "kv_1.dat".to_string();
+            let fname = format!("{:?}kv_1.dat", prefix);
 
             let file_path = path.join(fname.clone());
 
@@ -70,12 +60,16 @@ impl KvStore {
 
         let readers = get_readers(&filepaths);
         let writer = get_current_writer(&filepaths);
+        let num_segments = readers.len() as u32;
 
         let mut kvstore = KvStore {
             index: HashMap::new(),
             writer,
             readers,
             dir: path,
+            rwmutex: std::sync::RwLock::new(()),
+            max_segment_size: INITIAL_MAX_SEGMENT_SIZE,
+            num_segments,
         };
 
         // println!("{:?}", filepaths);
@@ -88,7 +82,7 @@ impl KvStore {
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
         if let Some(info) = self.index.get(&key) {
             let idx = info.segment_id - 1;
-            let reader = &mut self.readers[idx as usize];
+            let reader = self.readers.get_mut(idx as usize).unwrap();
             reader.seek(SeekFrom::Start(info.start))?;
             let cmd_reader = reader.take(info.size);
 
@@ -105,11 +99,12 @@ impl KvStore {
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         let pos = self.writer.seek(SeekFrom::End(0))?;
 
-        if pos >= MAX_SEGMENT_SIZE {
-            let fname = format!("kv_{}.dat", self.readers.len() + 1);
+        if pos >= self.max_segment_size {
+            let fname = format!("kv_{}.dat", self.num_segments + 1);
             let file_path = self.dir.join(fname);
             let file = new_file(file_path.clone()).unwrap();
             self.readers.push(BufReader::new(file));
+            self.num_segments += 1;
             self.writer = get_writer(file_path);
         }
 
@@ -134,6 +129,11 @@ impl KvStore {
                 size: kv_pair_serialized.len() as u64,
             },
         );
+
+        if self.num_segments > NUM_SEGMENTS_COMPACTION_THREASHOLD {
+            self.compact()?;
+        }
+
         Ok(())
     }
 
@@ -186,6 +186,10 @@ impl KvStore {
 
         Ok(())
     }
+
+    fn compact(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 fn new_file(path: PathBuf) -> Result<File> {
@@ -225,4 +229,22 @@ fn get_writer(path: PathBuf) -> BufWriter<File> {
         .unwrap();
 
     BufWriter::new(file)
+}
+
+fn get_file_paths(path: PathBuf) -> Vec<PathBuf> {
+    let mut filepaths = Vec::new();
+
+    let mut dir_iter = fs::read_dir(path).unwrap();
+
+    while let Some(entry) = dir_iter.next() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.is_file() {
+            filepaths.push(path);
+        }
+    }
+
+    filepaths.sort();
+
+    filepaths
 }
