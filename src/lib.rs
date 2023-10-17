@@ -188,6 +188,7 @@ impl KvStore {
         Ok(())
     }
 
+    // Size-tiered compaction strategy
     fn compact(&mut self) -> Result<()> {
         let x = self.rwmutex.write().unwrap();
 
@@ -236,6 +237,7 @@ fn new_file(path: PathBuf) -> Result<File> {
         .write(true)
         .append(true)
         .create(true)
+        .read(true)
         .open(&path)?;
 
     Ok(file)
