@@ -1,7 +1,7 @@
 extern crate failure;
 extern crate serde_json;
 
-use crate::Result;
+use crate::{KvsEngine, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
@@ -43,10 +43,12 @@ impl KvStore {
         let path = path.into();
         fs::create_dir_all(&path)?;
 
+        println!("path {}", path.clone().display());
+
         let mut filepaths = get_file_paths(path.clone());
 
         if filepaths.len() == 0 {
-            let fname = format!("{}_kv_0.dat", 0);
+            let fname = format!("0_kv_0.dat");
 
             let file_path = path.join(fname.clone());
 
@@ -54,6 +56,8 @@ impl KvStore {
 
             filepaths.push(file_path.clone());
         }
+
+        println!("filepaths {:?}", &filepaths);
 
         let readers = get_readers(&filepaths);
         let writer = get_current_writer(&filepaths);
@@ -77,73 +81,6 @@ impl KvStore {
         kvstore.build_index()?;
 
         return Ok(kvstore);
-    }
-
-    pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        if let Some(info) = self.index.get(&key) {
-            let idx = info.segment_id;
-            let reader = self.readers.get_mut(idx as usize).unwrap();
-            reader.seek(SeekFrom::Start(info.start))?;
-            let cmd_reader = reader.take(info.size);
-
-            let KVPair { value, .. } = serde_json::from_reader(cmd_reader).unwrap();
-            match value.as_str() {
-                "rm" => Ok(None),
-                _ => Ok(Some(value)),
-            }
-        } else {
-            Ok(None)
-        }
-    }
-
-    pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        let pos = self.writer.seek(SeekFrom::End(0))?;
-
-        if pos >= self.max_segment_size {
-            let fname = format!("{}_kv_{}.dat", self.curr_gen, self.num_segments);
-            let file_path = self.dir.join(fname);
-            new_file(file_path.clone()).unwrap();
-            self.readers.push(get_reader(&file_path));
-            self.num_segments += 1;
-            self.writer = get_writer(file_path);
-        }
-
-        let pos = self.writer.seek(SeekFrom::End(0))?;
-
-        let writer = &mut self.writer;
-        let kv_pair = KVPair {
-            key: key.clone(),
-            value: value.clone(),
-        };
-        let kv_pair_serialized = serde_json::to_string(&kv_pair)?;
-
-        writer.write_u64::<BigEndian>(kv_pair_serialized.len() as u64)?;
-        write!(writer, "{}", kv_pair_serialized)?;
-
-        self.writer.flush()?;
-        self.writer.get_ref().sync_all()?;
-        self.index.insert(
-            key.clone(),
-            SizeInfo {
-                start: pos + 8,
-                segment_id: (self.num_segments - 1) as u32,
-                size: kv_pair_serialized.len() as u64,
-            },
-        );
-
-        if self.num_segments > NUM_SEGMENTS_COMPACTION_THREASHOLD {
-            self.compact()?;
-        }
-
-        Ok(())
-    }
-
-    pub fn remove(&mut self, key: String) -> Result<()> {
-        if let Some(_) = self.index.remove(&key) {
-            self.set(key, "rm".to_string())
-        } else {
-            Err(failure::err_msg("Key not found"))
-        }
     }
 
     fn build_index(&mut self) -> Result<()> {
@@ -227,6 +164,75 @@ impl KvStore {
         self.max_segment_size *= NUM_SEGMENTS_COMPACTION_THREASHOLD as u64;
 
         Ok(())
+    }
+}
+
+impl KvsEngine for KvStore {
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        if let Some(info) = self.index.get(&key) {
+            let idx = info.segment_id;
+            let reader = self.readers.get_mut(idx as usize).unwrap();
+            reader.seek(SeekFrom::Start(info.start))?;
+            let cmd_reader = reader.take(info.size);
+
+            let KVPair { value, .. } = serde_json::from_reader(cmd_reader).unwrap();
+            match value.as_str() {
+                "rm" => Ok(None),
+                _ => Ok(Some(value)),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        let pos = self.writer.seek(SeekFrom::End(0))?;
+
+        if pos >= self.max_segment_size {
+            let fname = format!("{}_kv_{}.dat", self.curr_gen, self.num_segments);
+            let file_path = self.dir.join(fname);
+            new_file(file_path.clone()).unwrap();
+            self.readers.push(get_reader(&file_path));
+            self.num_segments += 1;
+            self.writer = get_writer(file_path);
+        }
+
+        let pos = self.writer.seek(SeekFrom::End(0))?;
+
+        let writer = &mut self.writer;
+        let kv_pair = KVPair {
+            key: key.clone(),
+            value: value.clone(),
+        };
+        let kv_pair_serialized = serde_json::to_string(&kv_pair)?;
+
+        writer.write_u64::<BigEndian>(kv_pair_serialized.len() as u64)?;
+        write!(writer, "{}", kv_pair_serialized)?;
+
+        self.writer.flush()?;
+        self.writer.get_ref().sync_all()?;
+        self.index.insert(
+            key.clone(),
+            SizeInfo {
+                start: pos + 8,
+                segment_id: (self.num_segments - 1) as u32,
+                size: kv_pair_serialized.len() as u64,
+            },
+        );
+
+        if self.num_segments > NUM_SEGMENTS_COMPACTION_THREASHOLD {
+            self.compact()?;
+        }
+
+        Ok(())
+    }
+
+    fn remove(&mut self, key: String) -> Result<()> {
+        if let Some(_) = self.index.remove(&key) {
+            self.set(key, "rm".to_string())
+        } else {
+            Err(failure::err_msg("Key not found"))
+        }
     }
 }
 

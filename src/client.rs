@@ -15,7 +15,7 @@ fn send_request<R: Serialize>(addr: SocketAddr, request: R) -> Result<Response> 
 
     let request_buf = serialize(&request)?;
 
-    println!("Request buf: {:?}", request_buf);
+    // println!("Request buf: {:?}", request_buf);
 
     stream.write_all(&request_buf)?;
     // send EOF
@@ -44,7 +44,6 @@ impl KvsClient {
         };
 
         let request = Request::Get(get_request);
-        println!("GET Request: {:?}", request);
 
         match send_request(self.addr, request) {
             Ok(response) => match response {

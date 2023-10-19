@@ -1,6 +1,10 @@
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
+use std::rc::Rc;
+use std::sync::Arc;
 
 use slog::{info, Logger};
 extern crate bincode;
@@ -15,18 +19,20 @@ use crate::{KvStore, KvsEngine};
 pub struct KvsServer {
     addr: SocketAddr,
     listener: TcpListener,
-    engine: String,
+    engine: Rc<RefCell<dyn KvsEngine>>,
     dir: PathBuf,
     logger: Logger,
 }
 
 impl KvsServer {
     pub fn new(addr: SocketAddr, engine: String, dir: String, logger: Logger) -> Self {
+        let dir = PathBuf::from(dir);
+
         Self {
             addr,
-            engine,
+            engine: get_engine(engine, dir.clone()),
             listener: TcpListener::bind(addr).expect("Failed to bind to address"),
-            dir: PathBuf::from(dir),
+            dir,
             logger,
         }
     }
@@ -38,9 +44,9 @@ impl KvsServer {
             match stream {
                 Ok(stream) => {
                     println!("New connection: {:?}", stream.peer_addr());
-                    std::thread::spawn(move || {
-                        handle_client(stream);
-                    });
+                    // std::thread::spawn(move || {
+                    handle_client(Rc::clone(&self.engine), stream);
+                    // });
                 }
                 Err(e) => {
                     eprintln!("Error accepting connection: {}", e);
@@ -50,7 +56,11 @@ impl KvsServer {
     }
 }
 
-fn handle_client(mut stream: TcpStream) {
+fn handle_client<T>(engine: Rc<RefCell<T>>, stream: TcpStream)
+where
+    T: KvsEngine + ?Sized,
+{
+    let mut engine = engine.as_ref().borrow_mut();
     let mut stream = BufReader::new(stream);
 
     let mut buf = Vec::new();
@@ -59,35 +69,40 @@ fn handle_client(mut stream: TcpStream) {
         return;
     }
 
-    println!("Received buf: {:?}", buf);
+    // println!("Received buf: {:?}", buf);
 
     let request: Result<Request, Error> = deserialize(&buf);
 
-    println!("Received request: {:?}", request);
+    // println!("Received request: {:?}", request);
 
     let response = match request {
-        Ok(Request::Set(set_request)) => {
-            // Handle SET operation
-            // Implement your SET logic here
-            // In this example, we return a generic success response
-            Response::Success(b"SET operation successful".to_vec())
+        Ok(Request::Set(SetRequest { key, value })) => {
+            let key = String::from_utf8(key).unwrap();
+            let value = String::from_utf8(value).unwrap();
+            match engine.set(key, value) {
+                Ok(()) => Response::Success(b"SET operation successful".to_vec()),
+                Err(e) => Response::Error(format!("Error: {}", e)),
+            }
         }
-        Ok(Request::Get(get_request)) => {
-            // Handle GET operation
-            // Implement your GET logic here
-            // In this example, we return a generic success response
-            Response::Success(b"GET operation successful".to_vec())
+        Ok(Request::Get(GetRequest { key })) => {
+            let key = String::from_utf8(key).unwrap();
+            match engine.get(key) {
+                Ok(Some(value)) => Response::Success(value.into_bytes()),
+                Ok(None) => Response::Success("Key not found".to_string().into_bytes()),
+                Err(e) => Response::Error(format!("Error: {}", e)),
+            }
         }
-        Ok(Request::Remove(remove_request)) => {
-            // Handle REMOVE operation
-            // Implement your REMOVE logic here
-            // In this example, we return a generic success response
-            Response::Success(b"REMOVE operation successful".to_vec())
+        Ok(Request::Remove(RemoveRequest { key })) => {
+            let key = String::from_utf8(key).unwrap();
+            match engine.remove(key) {
+                Ok(()) => Response::Success(b"REMOVE operation successful".to_vec()),
+                Err(e) => Response::Error(format!("Error: {}", e)),
+            }
         }
         Err(e) => Response::Error(format!("Invalid request: {}", e)),
     };
 
-    println!("Sending response: {:?}", response);
+    // println!("Sending response: {:?}", response);
 
     let response_buf = serialize(&response).unwrap();
     if let Err(e) = stream.get_mut().write_all(&response_buf) {
@@ -95,8 +110,9 @@ fn handle_client(mut stream: TcpStream) {
     }
 }
 
-// fn get_engine(engine: String, dir: PathBuf) -> Box<dyn KvsEngine> {
-//     match engine.as_str() {
-//         "kvs" => Box::new(KvStore::open(dir)?),
-//     }
-// }
+fn get_engine(engine: String, dir: PathBuf) -> Rc<RefCell<dyn KvsEngine>> {
+    match engine.as_str() {
+        "kvs" => Rc::new(RefCell::new(KvStore::open(dir).unwrap())),
+        _ => Rc::new(RefCell::new(KvStore::open(dir).unwrap())),
+    }
+}
