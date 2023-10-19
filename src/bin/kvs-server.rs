@@ -1,40 +1,42 @@
-use std::net::IpAddr;
+extern crate slog;
+extern crate slog_async;
+extern crate slog_term;
+
+use std::net::{IpAddr, SocketAddr};
 
 use ::clap::{Args, Parser, Subcommand};
 use kvs::Result;
 
+use slog::{info, o, Drain};
+
 #[derive(Parser)]
-#[command(author, version)]
-#[command(about = "KV server")]
+#[clap(author, version)]
+#[clap(about = "KV server")]
 struct Cli {
-    #[command(subcommand)]
-    command: Option<Commands>,
+    #[arg(short = 'a', long = "addr", default_value = "127.0.0.1:4000")]
+    addr: SocketAddr,
+    #[arg(short = 'e', long = "engine", default_value = "kvs")]
+    engine: String,
     #[arg(short, long, default_value = ".")]
     dir: String,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    Start(Start),
-}
-
-#[derive(Args)]
-struct Start {
-    #[arg(short, long, default_value = "127.0.0.1:4000")]
-    addr: IpAddr,
-    #[arg(short, long, default_value = "kvs")]
-    engine: String,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    match &cli.command {
-        Some(Commands::Start(args)) => {
-            // start server
-        }
-        None => {}
-    }
+    let decorator = slog_term::TermDecorator::new().build();
+    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let drain = slog_async::Async::new(drain).build().fuse();
+
+    let log = slog::Logger::root(drain, o!());
+
+    // start server
+
+    let server = log.new(o!("ip" => cli.addr.to_string() , 
+                                            "version" => env!("CARGO_PKG_VERSION"),
+                                            "engine" => cli.engine));
+
+    info!(server, "Starting server");
 
     Ok(())
 }
