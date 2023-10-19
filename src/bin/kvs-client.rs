@@ -1,5 +1,8 @@
+use std::net::SocketAddr;
+
 use ::clap::{Args, Parser, Subcommand};
 use kvs::KvStore;
+use kvs::KvsClient;
 use kvs::Result;
 
 #[derive(Parser)]
@@ -10,6 +13,8 @@ struct Cli {
     command: Option<Commands>,
     #[arg(short, long, default_value = ".")]
     dir: String,
+    #[arg(short, long, default_value = "127.0.0.1:4000")]
+    addr: SocketAddr,
 }
 
 #[derive(Subcommand)]
@@ -37,35 +42,21 @@ struct Rm {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut kv = KvStore::open(cli.dir)?;
+    let client = KvsClient::new(cli.addr);
 
     match &cli.command {
         Some(Commands::Get(args)) => {
-            if args.key == "" {
-                std::process::exit(1);
-            }
-
-            if let Ok(value) = kv.get(args.key.clone()) {
-                match value {
-                    Some(value) => println!("{}", value),
-                    None => {
-                        println!("Key not found");
-                        std::process::exit(0);
-                    }
-                }
-            }
+            let val = client.get(args.key.clone())?;
+            println!("{}", val.unwrap());
             Ok(())
         }
         Some(Commands::Set(args)) => {
-            return kv.set(args.key.clone(), args.value.clone());
+            client.set(args.key.clone(), args.value.clone())?;
+            Ok(())
         }
         Some(Commands::Rm(args)) => {
-            if let Ok(_) = kv.remove(args.key.clone()) {
-                Ok(())
-            } else {
-                println!("Key not found");
-                std::process::exit(1);
-            }
+            client.remove(args.key.clone())?;
+            Ok(())
         }
         _ => {
             println!("Unknown method");

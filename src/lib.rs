@@ -1,7 +1,15 @@
 //! A simple key/value store.
+//!
+#[macro_use]
+extern crate serde_derive;
 
+pub use client::KvsClient;
 pub use engines::{KvStore, KvsEngine};
 pub use error::Result;
+pub use server::KvsServer;
 
+mod client;
+pub mod common;
 mod engines;
 mod error;
+mod server;

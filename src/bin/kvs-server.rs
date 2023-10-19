@@ -5,7 +5,7 @@ extern crate slog_term;
 use std::net::{IpAddr, SocketAddr};
 
 use ::clap::{Args, Parser, Subcommand};
-use kvs::Result;
+use kvs::{KvsServer, Result};
 
 use slog::{info, o, Drain};
 
@@ -32,11 +32,15 @@ fn main() -> Result<()> {
 
     // start server
 
-    let server = log.new(o!("ip" => cli.addr.to_string() , 
+    let logger = log.new(o!("ip" => cli.addr.to_string() , 
                                             "version" => env!("CARGO_PKG_VERSION"),
-                                            "engine" => cli.engine));
+                                            "engine" => cli.engine.clone()));
 
-    info!(server, "Starting server");
+    info!(logger, "Starting server");
+
+    let srv = KvsServer::new(cli.addr, cli.engine.clone(), cli.dir, logger);
+
+    srv.start();
 
     Ok(())
 }
