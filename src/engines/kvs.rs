@@ -43,7 +43,7 @@ impl KvStore {
         let path = path.into();
         fs::create_dir_all(&path)?;
 
-        println!("path {}", path.clone().display());
+        // println!("path {}", path.clone().display());
 
         let mut filepaths = get_file_paths(path.clone());
 
@@ -57,7 +57,7 @@ impl KvStore {
             filepaths.push(file_path.clone());
         }
 
-        println!("filepaths {:?}", &filepaths);
+        // println!("filepaths {:?}", &filepaths);
 
         let readers = get_readers(&filepaths);
         let writer = get_current_writer(&filepaths);

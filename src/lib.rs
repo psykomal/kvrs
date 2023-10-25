@@ -4,7 +4,7 @@
 extern crate serde_derive;
 
 pub use client::KvsClient;
-pub use engines::{KvStore, KvsEngine};
+pub use engines::{KvStore, KvsEngine, SledKvsEngine};
 pub use error::Result;
 pub use server::KvsServer;
 

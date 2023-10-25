@@ -27,3 +27,7 @@ sled = "0.34.7"
 slog = "2.7.0"
 slog-async = "2.8.0"
 slog-term = "2.9.0"
+
+[[bench]]
+name = "eng_bench"
+harness = false

@@ -20,8 +20,8 @@ pub trait KvsEngine {
     fn remove(&mut self, key: String) -> Result<()>;
 }
 
-mod kvs;
-mod sled_kvs;
+pub mod kvs;
+pub mod sled_kvs;
 
 pub use self::kvs::KvStore;
 pub use self::sled_kvs::SledKvsEngine;
