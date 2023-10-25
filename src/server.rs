@@ -13,7 +13,8 @@ extern crate serde_bytes;
 use bincode::{deserialize, serialize, Error};
 use std::thread;
 
-use crate::common::*;
+use crate::engines::SledKvsEngine;
+use crate::{common::*, engines};
 use crate::{KvStore, KvsEngine};
 
 pub struct KvsServer {
@@ -43,7 +44,7 @@ impl KvsServer {
         for stream in self.listener.incoming() {
             match stream {
                 Ok(stream) => {
-                    println!("New connection: {:?}", stream.peer_addr());
+                    // println!("New connection: {:?}", stream.peer_addr());
                     // std::thread::spawn(move || {
                     handle_client(Rc::clone(&self.engine), stream);
                     // });
@@ -113,6 +114,7 @@ where
 fn get_engine(engine: String, dir: PathBuf) -> Rc<RefCell<dyn KvsEngine>> {
     match engine.as_str() {
         "kvs" => Rc::new(RefCell::new(KvStore::open(dir).unwrap())),
+        "sled" => Rc::new(RefCell::new(SledKvsEngine::open(dir.to_str().unwrap()))),
         _ => Rc::new(RefCell::new(KvStore::open(dir).unwrap())),
     }
 }

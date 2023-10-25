@@ -3,6 +3,7 @@ extern crate serde_bytes;
 
 extern crate bincode;
 use bincode::{deserialize, serialize};
+use slog::{error, info, Logger};
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -31,11 +32,12 @@ fn send_request<R: Serialize>(addr: SocketAddr, request: R) -> Result<Response> 
 
 pub struct KvsClient {
     addr: SocketAddr,
+    logger: Logger,
 }
 
 impl KvsClient {
-    pub fn new(addr: SocketAddr) -> KvsClient {
-        KvsClient { addr }
+    pub fn new(addr: SocketAddr, logger: Logger) -> KvsClient {
+        KvsClient { addr, logger }
     }
 
     pub fn get(&self, key: String) -> Result<Option<String>> {
@@ -53,12 +55,12 @@ impl KvsClient {
                     Ok(Some(val))
                 }
                 Response::Error(error) => {
-                    eprintln!("GET Error: {}", error);
+                    error!(self.logger, "GET Error: {}", error);
                     Err(failure::err_msg(error))
                 }
             },
             Err(e) => {
-                eprintln!("Error: {}", e);
+                error!(self.logger, "Error: {}", e);
                 Err(e)
             }
         }
@@ -78,12 +80,12 @@ impl KvsClient {
                     Ok(())
                 }
                 Response::Error(error) => {
-                    eprintln!("SET Error: {}", error);
+                    error!(self.logger, "SET Error: {}", error);
                     Err(failure::err_msg(error))
                 }
             },
             Err(e) => {
-                eprintln!("Error: {}", e);
+                error!(self.logger, "Error: {}", e);
                 Err(e)
             }
         }
@@ -104,12 +106,12 @@ impl KvsClient {
                     Ok(())
                 }
                 Response::Error(error) => {
-                    eprintln!("Remove Error: {}", error);
+                    error!(self.logger, "Remove Error: {}", error);
                     Err(failure::err_msg(error))
                 }
             },
             Err(e) => {
-                eprintln!("Error: {}", e);
+                error!(self.logger, "Error: {}", e);
                 Err(e)
             }
         }

@@ -171,7 +171,7 @@ fn cli_log_configuration() {
     assert!(content.contains("127.0.0.1:4001"));
 }
 
-// #[test]
+#[test]
 fn cli_wrong_engine() {
     // sled first, kvs second
     {
@@ -306,7 +306,7 @@ fn cli_access_server(engine: &str, addr: &str) {
         let _ = receiver.recv(); // wait for main thread to finish
         child.kill().expect("server exited before killed");
     });
-    thread::sleep(Duration::from_secs(1));
+    thread::sleep(Duration::from_secs(5));
 
     Command::cargo_bin("kvs-client")
         .unwrap()
@@ -315,6 +315,7 @@ fn cli_access_server(engine: &str, addr: &str) {
         .assert()
         .success()
         .stdout(contains("value3"));
+
     Command::cargo_bin("kvs-client")
         .unwrap()
         .args(&["get", "key1", "--addr", addr])
@@ -331,7 +332,7 @@ fn cli_access_server_kvs_engine() {
     cli_access_server("kvs", "127.0.0.1:4004");
 }
 
-// #[test]
-// fn cli_access_server_sled_engine() {
-//     cli_access_server("sled", "127.0.0.1:4005");
-// }
+#[test]
+fn cli_access_server_sled_engine() {
+    cli_access_server("sled", "127.0.0.1:4005");
+}
