@@ -11,10 +11,6 @@ use kvs::Result;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
-    #[arg(short, long, default_value = ".")]
-    dir: String,
-    #[arg(short, long, default_value = "127.0.0.1:4000")]
-    addr: SocketAddr,
 }
 
 #[derive(Subcommand)]
@@ -27,34 +23,42 @@ enum Commands {
 #[derive(Args)]
 struct Get {
     key: String,
+    #[arg(short, long, default_value = "127.0.0.1:4000")]
+    addr: SocketAddr,
 }
 
 #[derive(Args)]
 struct Set {
     key: String,
     value: String,
+    #[arg(short, long, default_value = "127.0.0.1:4000")]
+    addr: SocketAddr,
 }
 
 #[derive(Args)]
 struct Rm {
     key: String,
+    #[arg(short, long, default_value = "127.0.0.1:4000")]
+    addr: SocketAddr,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let client = KvsClient::new(cli.addr);
 
     match &cli.command {
         Some(Commands::Get(args)) => {
+            let client = KvsClient::new(args.addr);
             let val = client.get(args.key.clone())?;
             println!("{}", val.unwrap());
             Ok(())
         }
         Some(Commands::Set(args)) => {
+            let client = KvsClient::new(args.addr);
             client.set(args.key.clone(), args.value.clone())?;
             Ok(())
         }
         Some(Commands::Rm(args)) => {
+            let client = KvsClient::new(args.addr);
             client.remove(args.key.clone())?;
             Ok(())
         }

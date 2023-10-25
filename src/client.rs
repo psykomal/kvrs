@@ -49,7 +49,7 @@ impl KvsClient {
             Ok(response) => match response {
                 Response::Success(data) => {
                     let val = String::from_utf8(data).unwrap();
-                    println!("GET Response: {:?}", val);
+                    // println!("{}", val);
                     Ok(Some(val))
                 }
                 Response::Error(error) => {
@@ -74,7 +74,7 @@ impl KvsClient {
         match send_request(self.addr, request) {
             Ok(response) => match response {
                 Response::Success(data) => {
-                    println!("SET Response: {:?}", String::from_utf8(data).unwrap());
+                    // println!("SET Response: {:?}", String::from_utf8(data).unwrap());
                     Ok(())
                 }
                 Response::Error(error) => {
@@ -100,7 +100,7 @@ impl KvsClient {
             Ok(response) => match response {
                 Response::Success(data) => {
                     let val = String::from_utf8(data).unwrap();
-                    println!("Remove Response: {:?}", val);
+                    // println!("Remove Response: {:?}", val);
                     Ok(())
                 }
                 Response::Error(error) => {
