@@ -152,6 +152,7 @@ impl KvStore {
     // Size-tiered compaction strategy
     fn compact(&self) -> Result<()> {
         let mut writer = self.writer.lock().unwrap();
+        let mut reader = self.reader.clone();
 
         let compaction_gen = writer.curr_gen + 1;
         let filepaths = get_file_paths_sorted(self.dir.clone());
@@ -161,7 +162,6 @@ impl KvStore {
         let mut index = self.index.lock().unwrap();
 
         for (key, info) in index.iter_mut() {
-            let mut reader = self.reader.clone();
             let reader = reader.readers.get_mut(info.segment_id as usize).unwrap();
 
             reader.seek(SeekFrom::Start(info.start))?;
@@ -194,7 +194,6 @@ impl KvStore {
 
         writer.curr_gen = compaction_gen;
         writer.max_segment_size *= NUM_SEGMENTS_COMPACTION_THREASHOLD as u64;
-        println!("alls good");
 
         Ok(())
     }
@@ -259,7 +258,7 @@ impl KvsEngine for KvStore {
         let mut index = self.index.lock().unwrap();
 
         let num_segments = reader.readers.len();
-        println!("num_segments: {}", num_segments);
+        // println!("num_segments: {}", num_segments);
 
         index.insert(
             key.clone(),
