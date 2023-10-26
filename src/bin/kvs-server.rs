@@ -8,7 +8,7 @@ use std::{
 };
 
 use ::clap::{Args, Parser, Subcommand};
-use kvs::{KvsServer, Result};
+use kvs::{KvsServer, NaiveThreadPool, Result, ThreadPool};
 
 use slog::{info, o, Drain};
 
@@ -20,6 +20,8 @@ struct Cli {
     addr: SocketAddr,
     #[arg(short = 'e', long = "engine", default_value = "kvs")]
     engine: String,
+    #[arg(short = 'p', long = "pool", default_value = "naive")]
+    pool: String,
     #[arg(short, long, default_value = ".")]
     dir: String,
 }
@@ -46,7 +48,12 @@ fn main() -> Result<()> {
         _ => panic!("Unknown engine"),
     };
 
-    let srv = KvsServer::new(cli.addr, engine, cli.dir, logger);
+    let pool = match cli.pool.as_str() {
+        "naive" => NaiveThreadPool::new(10)?,
+        _ => panic!("Unknown pool"),
+    };
+
+    let srv = KvsServer::new(cli.addr, engine, cli.dir, logger, pool);
 
     srv.start();
 

@@ -14,22 +14,24 @@ use bincode::{deserialize, serialize, Error};
 use std::thread;
 
 use crate::engines::SledKvsEngine;
-use crate::{common::*, engines};
+use crate::{common::*, engines, ThreadPool};
 use crate::{KvStore, KvsEngine};
 
-pub struct KvsServer<E: KvsEngine> {
+pub struct KvsServer<E: KvsEngine, P: ThreadPool> {
     addr: SocketAddr,
     listener: TcpListener,
     engine: E,
     dir: PathBuf,
     logger: Logger,
+    pool: P,
 }
 
-impl<E> KvsServer<E>
+impl<E, P> KvsServer<E, P>
 where
     E: KvsEngine,
+    P: ThreadPool,
 {
-    pub fn new(addr: SocketAddr, engine: E, dir: String, logger: Logger) -> Self {
+    pub fn new(addr: SocketAddr, engine: E, dir: String, logger: Logger, pool: P) -> Self {
         let dir = PathBuf::from(dir);
 
         Self {
@@ -38,6 +40,7 @@ where
             listener: TcpListener::bind(addr).expect("Failed to bind to address"),
             dir,
             logger,
+            pool,
         }
     }
 
@@ -49,8 +52,12 @@ where
                 Ok(stream) => {
                     // println!("New connection: {:?}", stream.peer_addr());
                     // std::thread::spawn(move || {
-                    handle_client(self.engine.clone(), stream);
                     // });
+                    let engine = self.engine.clone();
+
+                    self.pool.spawn(move || {
+                        handle_client(engine, stream);
+                    });
                 }
                 Err(e) => {
                     eprintln!("Error accepting connection: {}", e);
