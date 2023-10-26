@@ -24,7 +24,6 @@ pub struct KvStore {
 struct StoreReader {
     dir: PathBuf,
     readers: Vec<BufReader<File>>,
-    num_segments: u32,
 }
 
 impl Clone for StoreReader {
@@ -32,7 +31,6 @@ impl Clone for StoreReader {
         StoreReader {
             dir: self.dir.clone(),
             readers: get_readers_dir(self.dir.clone()),
-            num_segments: self.num_segments,
         }
     }
 }
@@ -83,7 +81,6 @@ impl KvStore {
 
         let readers = get_readers(&filepaths);
         let writer = get_current_writer(&filepaths);
-        let num_segments = filepaths.len() as u32;
         let curr_gen = get_curr_gen(&filepaths);
 
         let mut kvstore = KvStore {
@@ -98,7 +95,6 @@ impl KvStore {
             reader: StoreReader {
                 dir: path.clone(),
                 readers,
-                num_segments,
             },
             dir: path.clone(),
             rwmutex: Arc::new(std::sync::RwLock::new(())),
@@ -190,7 +186,6 @@ impl KvStore {
 
         let mut reader = self.reader.clone();
         reader.readers = get_readers_dir(self.dir.clone());
-        reader.num_segments = 1;
 
         writer.writer = compaction_writer;
 
@@ -199,6 +194,7 @@ impl KvStore {
 
         writer.curr_gen = compaction_gen;
         writer.max_segment_size *= NUM_SEGMENTS_COMPACTION_THREASHOLD as u64;
+        println!("alls good");
 
         Ok(())
     }
@@ -229,19 +225,20 @@ impl KvsEngine for KvStore {
     fn set(&self, key: String, value: String) -> Result<()> {
         let x = self.rwmutex.write().unwrap();
         let mut writer = self.writer.lock().unwrap();
+        let mut reader = self.reader.clone();
 
         let pos = writer.writer.seek(SeekFrom::End(0))?;
+        let num_segments = reader.readers.len();
 
-        // if pos >= writer.max_segment_size {
-        //     let fname = format!("{}_kv_{}.dat", writer.curr_gen, self.reader.num_segments);
-        //     let file_path = self.dir.join(fname);
-        //     new_file(file_path.clone()).unwrap();
+        if pos >= writer.max_segment_size {
+            let fname = format!("{}_kv_{}.dat", writer.curr_gen, num_segments);
+            let file_path = self.dir.join(fname);
+            new_file(file_path.clone()).unwrap();
 
-        //     let mut reader = self.reader.clone();
-        //     reader.num_segments += 1;
+            reader.readers.push(get_reader(&file_path));
 
-        //     writer.writer = get_writer(file_path);
-        // }
+            writer.writer = get_writer(file_path);
+        }
 
         let pos = writer.writer.seek(SeekFrom::End(0))?;
 
@@ -261,18 +258,24 @@ impl KvsEngine for KvStore {
 
         let mut index = self.index.lock().unwrap();
 
+        let num_segments = reader.readers.len();
+        println!("num_segments: {}", num_segments);
+
         index.insert(
             key.clone(),
             SizeInfo {
                 start: pos + 8,
-                segment_id: (self.reader.num_segments - 1) as u32,
+                segment_id: (num_segments - 1) as u32,
                 size: kv_pair_serialized.len() as u64,
             },
         );
 
-        // if self.reader.num_segments > NUM_SEGMENTS_COMPACTION_THREASHOLD {
-        //     self.compact()?;
-        // }
+        if reader.readers.len() > NUM_SEGMENTS_COMPACTION_THREASHOLD as usize {
+            drop(writer);
+            drop(index);
+
+            self.compact()?;
+        }
 
         Ok(())
     }
@@ -302,6 +305,7 @@ fn new_file(path: PathBuf) -> Result<File> {
 
 fn get_readers_dir(path: PathBuf) -> Vec<BufReader<File>> {
     let filepaths = get_file_paths_sorted(path);
+    // println!("filepaths: {:?}", filepaths);
 
     get_readers(&filepaths)
 }
@@ -352,7 +356,21 @@ fn get_file_paths_sorted(path: PathBuf) -> Vec<PathBuf> {
         }
     }
 
-    filepaths.sort();
+    filepaths.sort_by(|a, b| {
+        // get filename without extension
+        let a_filename = a.file_stem().unwrap().to_str().unwrap();
+        let b_filename = b.file_stem().unwrap().to_str().unwrap();
+
+        // get segment id
+        let a_filename_split: Vec<&str> = a_filename.split("_").collect();
+        let a_segment_id = a_filename_split[2].parse::<u32>().unwrap();
+
+        let b_filename_split: Vec<&str> = b_filename.split("_").collect();
+        let b_segment_id = b_filename_split[2].parse::<u32>().unwrap();
+
+        // sort by segment id
+        a_segment_id.cmp(&b_segment_id)
+    });
 
     filepaths
 }
