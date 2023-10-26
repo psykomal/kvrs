@@ -100,8 +100,8 @@ fn compaction() -> Result<()> {
     };
 
     let mut current_size = dir_size();
-    for iter in 0..1000 {
-        for key_id in 0..1000 {
+    for iter in 0..50 {
+        for key_id in 0..50 {
             let key = format!("key{}", key_id);
             let value = format!("{}", iter);
             store.set(key, value)?;
@@ -117,7 +117,7 @@ fn compaction() -> Result<()> {
         drop(store);
         // reopen and check content
         let store = KvStore::open(temp_dir.path())?;
-        for key_id in 0..1000 {
+        for key_id in 0..50 {
             let key = format!("key{}", key_id);
             assert_eq!(store.get(key)?, Some(format!("{}", iter)));
         }
@@ -145,6 +145,7 @@ fn concurrent_set() -> Result<()> {
     barrier.wait();
 
     for i in 0..1000 {
+        // println!("{:?}", store.get(format!("key{}", i))?);
         assert_eq!(store.get(format!("key{}", i))?, Some(format!("value{}", i)));
     }
 

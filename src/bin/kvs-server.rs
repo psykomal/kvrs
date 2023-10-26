@@ -2,7 +2,10 @@ extern crate slog;
 extern crate slog_async;
 extern crate slog_term;
 
-use std::net::{IpAddr, SocketAddr};
+use std::{
+    net::{IpAddr, SocketAddr},
+    path::PathBuf,
+};
 
 use ::clap::{Args, Parser, Subcommand};
 use kvs::{KvsServer, Result};
@@ -38,7 +41,12 @@ fn main() -> Result<()> {
 
     info!(logger, "Starting server");
 
-    let srv = KvsServer::new(cli.addr, cli.engine.clone(), cli.dir, logger);
+    let engine = match cli.engine.as_str() {
+        "kvs" => kvs::KvStore::open(PathBuf::from(&cli.dir))?,
+        _ => panic!("Unknown engine"),
+    };
+
+    let srv = KvsServer::new(cli.addr, engine, cli.dir, logger);
 
     srv.start();
 

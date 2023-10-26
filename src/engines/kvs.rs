@@ -6,20 +6,42 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::sync::{Arc, Mutex};
 use std::{collections::HashMap, fs::File, path::PathBuf};
 
 const INITIAL_MAX_SEGMENT_SIZE: u64 = 1024;
 const NUM_SEGMENTS_COMPACTION_THREASHOLD: u32 = 4;
 
+#[derive(Clone)]
 pub struct KvStore {
-    index: HashMap<String, SizeInfo>,
-    writer: BufWriter<File>,
-    readers: Vec<BufReader<File>>,
+    index: Arc<Mutex<HashMap<String, SizeInfo>>>,
+    writer: Arc<Mutex<StoreWriter>>,
+    reader: StoreReader,
     dir: PathBuf,
-    rwmutex: std::sync::RwLock<()>,
+    rwmutex: Arc<std::sync::RwLock<()>>,
+}
+
+struct StoreReader {
+    dir: PathBuf,
+    readers: Vec<BufReader<File>>,
+    num_segments: u32,
+}
+
+impl Clone for StoreReader {
+    fn clone(&self) -> Self {
+        StoreReader {
+            dir: self.dir.clone(),
+            readers: get_readers_dir(self.dir.clone()),
+            num_segments: self.num_segments,
+        }
+    }
+}
+
+struct StoreWriter {
+    dir: PathBuf,
+    writer: BufWriter<File>,
     max_segment_size: u64,
     curr_gen: u32,
-    num_segments: u32,
 }
 
 /// File format:
@@ -45,7 +67,7 @@ impl KvStore {
 
         // println!("path {}", path.clone().display());
 
-        let mut filepaths = get_file_paths(path.clone());
+        let mut filepaths = get_file_paths_sorted(path.clone());
 
         if filepaths.len() == 0 {
             let fname = format!("0_kv_0.dat");
@@ -65,15 +87,21 @@ impl KvStore {
         let curr_gen = get_curr_gen(&filepaths);
 
         let mut kvstore = KvStore {
-            index: HashMap::new(),
-            writer,
-            readers,
-            dir: path,
-            rwmutex: std::sync::RwLock::new(()),
-            max_segment_size: INITIAL_MAX_SEGMENT_SIZE
-                * u64::pow(NUM_SEGMENTS_COMPACTION_THREASHOLD as u64, curr_gen),
-            num_segments,
-            curr_gen,
+            index: Arc::new(Mutex::new(HashMap::new())),
+            writer: Arc::new(Mutex::new(StoreWriter {
+                dir: path.clone(),
+                writer: writer,
+                max_segment_size: INITIAL_MAX_SEGMENT_SIZE
+                    * u64::pow(NUM_SEGMENTS_COMPACTION_THREASHOLD as u64, curr_gen),
+                curr_gen,
+            })),
+            reader: StoreReader {
+                dir: path.clone(),
+                readers,
+                num_segments,
+            },
+            dir: path.clone(),
+            rwmutex: Arc::new(std::sync::RwLock::new(())),
         };
 
         // println!("{:?}", filepaths);
@@ -84,9 +112,11 @@ impl KvStore {
     }
 
     fn build_index(&mut self) -> Result<()> {
-        self.index = HashMap::new();
+        self.index = Arc::new(Mutex::new(HashMap::new()));
+        let mut readers = self.reader.clone().readers;
+        let mut index = self.index.lock().unwrap();
 
-        for (i, reader) in self.readers.iter_mut().enumerate() {
+        for (i, reader) in readers.iter_mut().enumerate() {
             let mut pos = 0;
             let lastpos = reader.seek(SeekFrom::End(0))?;
 
@@ -100,7 +130,7 @@ impl KvStore {
                 reader.read_exact(&mut buf)?;
                 let kvpair: KVPair = serde_json::from_slice(&buf)?;
 
-                self.index.insert(
+                index.insert(
                     kvpair.key.clone(),
                     SizeInfo {
                         start: pos + 8,
@@ -110,7 +140,7 @@ impl KvStore {
                 );
 
                 if kvpair.value == "rm".to_string() {
-                    if let Some(_) = self.index.remove(&kvpair.key) {
+                    if let Some(_) = index.remove(&kvpair.key) {
                     } else {
                         return Err(failure::err_msg("Couldn't delete key"));
                     }
@@ -124,17 +154,20 @@ impl KvStore {
     }
 
     // Size-tiered compaction strategy
-    fn compact(&mut self) -> Result<()> {
-        let x = self.rwmutex.write().unwrap();
+    fn compact(&self) -> Result<()> {
+        let mut writer = self.writer.lock().unwrap();
 
-        let compaction_gen = self.curr_gen + 1;
-        let filepaths = get_file_paths(self.dir.clone());
+        let compaction_gen = writer.curr_gen + 1;
+        let filepaths = get_file_paths_sorted(self.dir.clone());
         let compacted_file_path = self.dir.join(format!("{}_kv_0.dat", compaction_gen));
         let _ = new_file(compacted_file_path.clone())?;
         let mut compaction_writer = get_writer(compacted_file_path.clone());
+        let mut index = self.index.lock().unwrap();
 
-        for (key, info) in self.index.iter_mut() {
-            let reader = self.readers.get_mut(info.segment_id as usize).unwrap();
+        for (key, info) in index.iter_mut() {
+            let mut reader = self.reader.clone();
+            let reader = reader.readers.get_mut(info.segment_id as usize).unwrap();
+
             reader.seek(SeekFrom::Start(info.start))?;
 
             let cmd_reader = reader.take(info.size);
@@ -154,24 +187,32 @@ impl KvStore {
         for filepath in filepaths {
             let _ = fs::remove_file(filepath);
         }
-        self.readers = Vec::<BufReader<File>>::new();
 
-        self.writer = compaction_writer;
-        let reader = BufReader::new(File::open(compacted_file_path).unwrap());
-        self.readers.push(reader);
-        self.curr_gen = compaction_gen;
-        self.num_segments = 1;
-        self.max_segment_size *= NUM_SEGMENTS_COMPACTION_THREASHOLD as u64;
+        let mut reader = self.reader.clone();
+        reader.readers = get_readers_dir(self.dir.clone());
+        reader.num_segments = 1;
+
+        writer.writer = compaction_writer;
+
+        let new_rdr = BufReader::new(File::open(compacted_file_path).unwrap());
+        reader.readers.push(new_rdr);
+
+        writer.curr_gen = compaction_gen;
+        writer.max_segment_size *= NUM_SEGMENTS_COMPACTION_THREASHOLD as u64;
 
         Ok(())
     }
 }
 
 impl KvsEngine for KvStore {
-    fn get(&mut self, key: String) -> Result<Option<String>> {
-        if let Some(info) = self.index.get(&key) {
+    fn get(&self, key: String) -> Result<Option<String>> {
+        let x = self.rwmutex.write().unwrap();
+        let index = self.index.lock().unwrap();
+
+        if let Some(info) = index.get(&key) {
             let idx = info.segment_id;
-            let reader = self.readers.get_mut(idx as usize).unwrap();
+            let mut reader = self.reader.clone();
+            let reader = reader.readers.get_mut(idx as usize).unwrap();
             reader.seek(SeekFrom::Start(info.start))?;
             let cmd_reader = reader.take(info.size);
 
@@ -185,50 +226,62 @@ impl KvsEngine for KvStore {
         }
     }
 
-    fn set(&mut self, key: String, value: String) -> Result<()> {
-        let pos = self.writer.seek(SeekFrom::End(0))?;
+    fn set(&self, key: String, value: String) -> Result<()> {
+        let x = self.rwmutex.write().unwrap();
+        let mut writer = self.writer.lock().unwrap();
 
-        if pos >= self.max_segment_size {
-            let fname = format!("{}_kv_{}.dat", self.curr_gen, self.num_segments);
-            let file_path = self.dir.join(fname);
-            new_file(file_path.clone()).unwrap();
-            self.readers.push(get_reader(&file_path));
-            self.num_segments += 1;
-            self.writer = get_writer(file_path);
-        }
+        let pos = writer.writer.seek(SeekFrom::End(0))?;
 
-        let pos = self.writer.seek(SeekFrom::End(0))?;
+        // if pos >= writer.max_segment_size {
+        //     let fname = format!("{}_kv_{}.dat", writer.curr_gen, self.reader.num_segments);
+        //     let file_path = self.dir.join(fname);
+        //     new_file(file_path.clone()).unwrap();
 
-        let writer = &mut self.writer;
+        //     let mut reader = self.reader.clone();
+        //     reader.num_segments += 1;
+
+        //     writer.writer = get_writer(file_path);
+        // }
+
+        let pos = writer.writer.seek(SeekFrom::End(0))?;
+
         let kv_pair = KVPair {
             key: key.clone(),
             value: value.clone(),
         };
         let kv_pair_serialized = serde_json::to_string(&kv_pair)?;
 
-        writer.write_u64::<BigEndian>(kv_pair_serialized.len() as u64)?;
-        write!(writer, "{}", kv_pair_serialized)?;
+        writer
+            .writer
+            .write_u64::<BigEndian>(kv_pair_serialized.len() as u64)?;
+        write!(writer.writer, "{}", kv_pair_serialized)?;
 
-        self.writer.flush()?;
-        self.writer.get_ref().sync_all()?;
-        self.index.insert(
+        writer.writer.flush()?;
+        writer.writer.get_ref().sync_all()?;
+
+        let mut index = self.index.lock().unwrap();
+
+        index.insert(
             key.clone(),
             SizeInfo {
                 start: pos + 8,
-                segment_id: (self.num_segments - 1) as u32,
+                segment_id: (self.reader.num_segments - 1) as u32,
                 size: kv_pair_serialized.len() as u64,
             },
         );
 
-        if self.num_segments > NUM_SEGMENTS_COMPACTION_THREASHOLD {
-            self.compact()?;
-        }
+        // if self.reader.num_segments > NUM_SEGMENTS_COMPACTION_THREASHOLD {
+        //     self.compact()?;
+        // }
 
         Ok(())
     }
 
-    fn remove(&mut self, key: String) -> Result<()> {
-        if let Some(_) = self.index.remove(&key) {
+    fn remove(&self, key: String) -> Result<()> {
+        let mut index = self.index.lock().unwrap();
+
+        if let Some(_) = index.remove(&key) {
+            drop(index);
             self.set(key, "rm".to_string())
         } else {
             Err(failure::err_msg("Key not found"))
@@ -245,6 +298,12 @@ fn new_file(path: PathBuf) -> Result<File> {
         .open(&path)?;
 
     Ok(file)
+}
+
+fn get_readers_dir(path: PathBuf) -> Vec<BufReader<File>> {
+    let filepaths = get_file_paths_sorted(path);
+
+    get_readers(&filepaths)
 }
 
 fn get_readers(filepaths: &Vec<PathBuf>) -> Vec<BufReader<File>> {
@@ -280,7 +339,7 @@ fn get_writer(path: PathBuf) -> BufWriter<File> {
     BufWriter::new(file)
 }
 
-fn get_file_paths(path: PathBuf) -> Vec<PathBuf> {
+fn get_file_paths_sorted(path: PathBuf) -> Vec<PathBuf> {
     let mut filepaths = Vec::new();
 
     let mut dir_iter = fs::read_dir(path).unwrap();

@@ -17,21 +17,24 @@ use crate::engines::SledKvsEngine;
 use crate::{common::*, engines};
 use crate::{KvStore, KvsEngine};
 
-pub struct KvsServer {
+pub struct KvsServer<E: KvsEngine> {
     addr: SocketAddr,
     listener: TcpListener,
-    engine: Rc<RefCell<dyn KvsEngine>>,
+    engine: E,
     dir: PathBuf,
     logger: Logger,
 }
 
-impl KvsServer {
-    pub fn new(addr: SocketAddr, engine: String, dir: String, logger: Logger) -> Self {
+impl<E> KvsServer<E>
+where
+    E: KvsEngine,
+{
+    pub fn new(addr: SocketAddr, engine: E, dir: String, logger: Logger) -> Self {
         let dir = PathBuf::from(dir);
 
         Self {
             addr,
-            engine: get_engine(engine, dir.clone()),
+            engine,
             listener: TcpListener::bind(addr).expect("Failed to bind to address"),
             dir,
             logger,
@@ -46,7 +49,7 @@ impl KvsServer {
                 Ok(stream) => {
                     // println!("New connection: {:?}", stream.peer_addr());
                     // std::thread::spawn(move || {
-                    handle_client(Rc::clone(&self.engine), stream);
+                    handle_client(self.engine.clone(), stream);
                     // });
                 }
                 Err(e) => {
@@ -57,11 +60,10 @@ impl KvsServer {
     }
 }
 
-fn handle_client<T>(engine: Rc<RefCell<T>>, stream: TcpStream)
+fn handle_client<T>(engine: T, stream: TcpStream)
 where
-    T: KvsEngine + ?Sized,
+    T: KvsEngine,
 {
-    let mut engine = engine.as_ref().borrow_mut();
     let mut stream = BufReader::new(stream);
 
     let mut buf = Vec::new();
@@ -108,13 +110,5 @@ where
     let response_buf = serialize(&response).unwrap();
     if let Err(e) = stream.get_mut().write_all(&response_buf) {
         eprintln!("Error writing to stream: {}", e);
-    }
-}
-
-fn get_engine(engine: String, dir: PathBuf) -> Rc<RefCell<dyn KvsEngine>> {
-    match engine.as_str() {
-        "kvs" => Rc::new(RefCell::new(KvStore::open(dir).unwrap())),
-        "sled" => Rc::new(RefCell::new(SledKvsEngine::open(dir.to_str().unwrap()))),
-        _ => Rc::new(RefCell::new(KvStore::open(dir).unwrap())),
     }
 }
