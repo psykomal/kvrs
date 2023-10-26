@@ -20,16 +20,6 @@ pub trait KvsEngine {
     fn remove(&mut self, key: String) -> Result<()>;
 }
 
-pub trait ThreadPool {
-    fn new(threads: u32) -> Result<Self>
-    where
-        Self: Sized;
-
-    fn spawn<F>(&self, job: F)
-    where
-        F: FnOnce() + Send + 'static;
-}
-
 pub mod kvs;
 pub mod sled_kvs;
 
