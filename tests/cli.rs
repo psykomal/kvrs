@@ -306,7 +306,7 @@ fn cli_access_server(engine: &str, addr: &str) {
         let _ = receiver.recv(); // wait for main thread to finish
         child.kill().expect("server exited before killed");
     });
-    thread::sleep(Duration::from_secs(5));
+    thread::sleep(Duration::from_secs(1));
 
     Command::cargo_bin("kvs-client")
         .unwrap()
@@ -315,7 +315,6 @@ fn cli_access_server(engine: &str, addr: &str) {
         .assert()
         .success()
         .stdout(contains("value3"));
-
     Command::cargo_bin("kvs-client")
         .unwrap()
         .args(&["get", "key1", "--addr", addr])
