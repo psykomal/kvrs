@@ -8,9 +8,12 @@ use std::{
 };
 
 use ::clap::{Args, Parser, Subcommand};
-use kvs::{KvsServer, NaiveThreadPool, RayonThreadPool, Result, SharedQueueThreadPool, ThreadPool};
+use kvs::{
+    KvsEngine, KvsServer, NaiveThreadPool, RayonThreadPool, Result, SharedQueueThreadPool,
+    ThreadPool,
+};
 
-use slog::{info, o, Drain};
+use slog::{info, o, Drain, Logger};
 
 #[derive(Parser)]
 #[clap(author, version)]
@@ -43,18 +46,32 @@ fn main() -> Result<()> {
 
     info!(logger, "Starting server");
 
-    let engine = match cli.engine.as_str() {
-        "kvs" => kvs::KvStore::open(PathBuf::from(&cli.dir))?,
-        _ => panic!("Unknown engine"),
-    };
-
     let num_cpus = num_cpus::get() as u32;
 
     let pool = RayonThreadPool::new(num_cpus)?;
 
-    let srv = KvsServer::new(cli.addr, engine, cli.dir, logger, pool);
-
-    srv.start();
+    match cli.engine.as_str() {
+        "kvs" => {
+            let engine = kvs::KvStore::open(PathBuf::from(&cli.dir))?;
+            run_with(engine, pool, cli.addr, cli.dir, logger);
+        }
+        "sled" => {
+            let engine = kvs::SledKvsEngine::open(PathBuf::from(&cli.dir));
+            run_with(engine, pool, cli.addr, cli.dir, logger);
+        }
+        _ => panic!("Unknown engine"),
+    };
 
     Ok(())
+}
+
+fn run_with<K: KvsEngine, P: ThreadPool>(
+    engine: K,
+    pool: P,
+    addr: SocketAddr,
+    dir: String,
+    logger: Logger,
+) {
+    let srv = KvsServer::new(addr, engine, dir, logger, pool);
+    srv.start();
 }

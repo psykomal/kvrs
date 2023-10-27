@@ -201,7 +201,7 @@ impl KvStore {
 
 impl KvsEngine for KvStore {
     fn get(&self, key: String) -> Result<Option<String>> {
-        let x = self.rwmutex.write().unwrap();
+        let x = self.rwmutex.read().unwrap();
         let index = self.index.lock().unwrap();
 
         if let Some(info) = index.get(&key) {
