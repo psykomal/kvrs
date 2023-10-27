@@ -14,7 +14,7 @@ use tempfile::TempDir;
 
 fn write_queued_kvstore(c: &mut Criterion) {
     let mut group = c.benchmark_group("write_queued_kvstore");
-    for i in &vec![1, 2, 4, 8, 16, 32] {
+    for i in &vec![1, 2, 4, 8] {
         group.bench_with_input(format!("kvs_{}", i), i, |b, i| {
             let (sender, receiver) = mpsc::sync_channel::<()>(0);
             let addr = "127.0.0.1:4004";
