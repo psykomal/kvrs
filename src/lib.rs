@@ -7,7 +7,7 @@ pub use client::KvsClient;
 pub use engines::{KvStore, KvsEngine, SledKvsEngine};
 pub use error::Result;
 pub use server::KvsServer;
-pub use thread_pool::{NaiveThreadPool, SharedQueueThreadPool, ThreadPool};
+pub use thread_pool::{NaiveThreadPool, RayonThreadPool, SharedQueueThreadPool, ThreadPool};
 
 mod client;
 pub mod common;

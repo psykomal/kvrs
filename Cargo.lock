@@ -634,6 +634,7 @@ dependencies = [
  "panic-control",
  "predicates",
  "rand",
+ "rayon",
  "serde",
  "serde_bytes",
  "serde_derive",

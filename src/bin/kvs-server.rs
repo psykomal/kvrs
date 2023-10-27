@@ -8,7 +8,7 @@ use std::{
 };
 
 use ::clap::{Args, Parser, Subcommand};
-use kvs::{KvsServer, NaiveThreadPool, Result, SharedQueueThreadPool, ThreadPool};
+use kvs::{KvsServer, NaiveThreadPool, RayonThreadPool, Result, SharedQueueThreadPool, ThreadPool};
 
 use slog::{info, o, Drain};
 
@@ -50,7 +50,7 @@ fn main() -> Result<()> {
 
     let num_cpus = num_cpus::get() as u32;
 
-    let pool = SharedQueueThreadPool::new(num_cpus)?;
+    let pool = RayonThreadPool::new(num_cpus)?;
 
     let srv = KvsServer::new(cli.addr, engine, cli.dir, logger, pool);
 
