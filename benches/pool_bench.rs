@@ -15,7 +15,7 @@ use tempfile::TempDir;
 fn write_queued_kvstore(c: &mut Criterion) {
     let mut group = c.benchmark_group("write_queued_kvstore");
     for i in &vec![1, 2, 4, 8] {
-        group.bench_with_input(format!("kvs_{}", i), i, |b, i| {
+        group.bench_with_input(format!("write_queued_kvs_{}", i), i, |b, i| {
             let (sender, receiver) = mpsc::sync_channel::<()>(0);
             let addr = "127.0.0.1:4004";
             let temp_dir = TempDir::new().unwrap();
@@ -72,9 +72,9 @@ fn write_queued_kvstore(c: &mut Criterion) {
 }
 
 fn read_queued_kvstore(c: &mut Criterion) {
-    let mut group = c.benchmark_group("write_queued_kvstore");
+    let mut group = c.benchmark_group("read_queued_kvstore");
     for i in &vec![1, 2, 4, 8] {
-        group.bench_with_input(format!("kvs_{}", i), i, |b, i| {
+        group.bench_with_input(format!("read_queued_kvstore_{}", i), i, |b, i| {
             let (sender, receiver) = mpsc::sync_channel::<()>(0);
             let addr = "127.0.0.1:4004";
             let temp_dir = TempDir::new().unwrap();
@@ -130,9 +130,9 @@ fn read_queued_kvstore(c: &mut Criterion) {
 }
 
 fn write_queued_sled(c: &mut Criterion) {
-    let mut group = c.benchmark_group("write_queued_kvstore");
+    let mut group = c.benchmark_group("write_queued_sled");
     for i in &vec![1, 2, 4, 8] {
-        group.bench_with_input(format!("kvs_{}", i), i, |b, i| {
+        group.bench_with_input(format!("write_queued_sled_{}", i), i, |b, i| {
             let (sender, receiver) = mpsc::sync_channel::<()>(0);
             let addr = "127.0.0.1:4004";
             let temp_dir = TempDir::new().unwrap();
@@ -189,9 +189,9 @@ fn write_queued_sled(c: &mut Criterion) {
 }
 
 fn read_queued_sled(c: &mut Criterion) {
-    let mut group = c.benchmark_group("write_queued_kvstore");
+    let mut group = c.benchmark_group("read_queued_sled");
     for i in &vec![1, 2, 4, 8] {
-        group.bench_with_input(format!("kvs_{}", i), i, |b, i| {
+        group.bench_with_input(format!("read_queued_sled_{}", i), i, |b, i| {
             let (sender, receiver) = mpsc::sync_channel::<()>(0);
             let addr = "127.0.0.1:4004";
             let temp_dir = TempDir::new().unwrap();
