@@ -246,5 +246,11 @@ fn read_queued_sled(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, write_queued_kvstore);
+criterion_group!(
+    benches,
+    write_queued_kvstore,
+    write_queued_sled,
+    read_queued_kvstore,
+    read_queued_sled
+);
 criterion_main!(benches);
