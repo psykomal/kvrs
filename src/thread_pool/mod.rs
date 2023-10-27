@@ -11,5 +11,7 @@ pub trait ThreadPool {
 }
 
 pub mod naive;
+pub mod sharedqueue;
 
 pub use naive::NaiveThreadPool;
+pub use sharedqueue::SharedQueueThreadPool;
