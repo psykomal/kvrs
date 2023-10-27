@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use kvs::{KvStore, KvsEngine, SledKvsEngine};
 use rand::prelude::*;
@@ -24,7 +26,7 @@ fn set_bench(c: &mut Criterion) {
             || {
                 let temp_dir = TempDir::new().unwrap();
                 (
-                    SledKvsEngine::open(temp_dir.path().to_str().unwrap()),
+                    SledKvsEngine::open(PathBuf::from(temp_dir.path())),
                     temp_dir,
                 )
             },
@@ -61,7 +63,7 @@ fn get_bench(c: &mut Criterion) {
     for i in &vec![5] {
         group.bench_with_input(format!("sled_{}", i), i, |b, i| {
             let temp_dir = TempDir::new().unwrap();
-            let mut db = SledKvsEngine::open(temp_dir.path().to_str().unwrap());
+            let mut db = SledKvsEngine::open(PathBuf::from(temp_dir.path()));
             for key_i in 1..(1 << i) {
                 db.set(format!("key{}", key_i), "value".to_string())
                     .unwrap();

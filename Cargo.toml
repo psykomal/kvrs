@@ -35,5 +35,5 @@ slog-async = "2.8.0"
 slog-term = "2.9.0"
 
 [[bench]]
-name = "eng_bench"
+name = "pool_bench"
 harness = false

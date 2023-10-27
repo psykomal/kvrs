@@ -25,6 +25,8 @@ struct Cli {
     engine: String,
     #[arg(short = 'p', long = "pool", default_value = "naive")]
     pool: String,
+    #[arg(short = 't', long = "threads", default_value = "4")]
+    threads: u32,
     #[arg(short, long, default_value = ".")]
     dir: String,
 }
@@ -46,9 +48,9 @@ fn main() -> Result<()> {
 
     info!(logger, "Starting server");
 
-    let num_cpus = num_cpus::get() as u32;
+    let num_threads = cli.threads;
 
-    let pool = RayonThreadPool::new(num_cpus)?;
+    let pool = RayonThreadPool::new(num_threads)?;
 
     match cli.engine.as_str() {
         "kvs" => {
