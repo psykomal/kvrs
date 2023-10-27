@@ -39,18 +39,20 @@ fn main() -> Result<()> {
     let drain = slog_async::Async::new(drain).build().fuse();
 
     let log = slog::Logger::root(drain, o!());
+    let num_threads = cli.threads;
 
     // start server
 
     let logger = log.new(o!("ip" => cli.addr.to_string() , 
                                             "version" => env!("CARGO_PKG_VERSION"),
-                                            "engine" => cli.engine.clone()));
+                                            "engine" => cli.engine.clone(),
+                                            "threads" => num_threads));
 
     info!(logger, "Starting server");
 
     let num_threads = cli.threads;
 
-    let pool = RayonThreadPool::new(num_threads)?;
+    let pool = SharedQueueThreadPool::new(num_threads)?;
 
     match cli.engine.as_str() {
         "kvs" => {
