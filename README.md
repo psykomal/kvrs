@@ -14,6 +14,7 @@
 
 ## Future Scope
 
+- [ ] Enhance docs with benchmarks and steps to run
 - [ ] Implement Lock-free KV Store
 - [ ] Bring in Async Rust
 - [ ] Multi-raft Support
