@@ -9,7 +9,7 @@
 - [x] Server with threadpool using Custom Thread Pool and Rayon
 - [x] Raft Integration (using openraft) + Actix-web server
 - [x] Benchmarks with Sled Engine (PS: Sled absolutely blows the custom KVstore out of the water)
-- [ ] Integrate with raft-rs instead of openraft (openraft seems to be breaking at high load)
+- [ ] Integrate with raft-rs instead of openraft (openraft seems to be breaking at high load, might not be using it correctly)
 - [ ] Benchmarks for Raft Integration using locust
 
 
