@@ -12,7 +12,7 @@ use std::{collections::HashMap, fs::File, path::PathBuf};
 const INITIAL_MAX_SEGMENT_SIZE: u64 = 1024;
 const NUM_SEGMENTS_COMPACTION_THREASHOLD: u32 = 4;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct KvStore {
     index: Arc<Mutex<HashMap<String, SizeInfo>>>,
     writer: Arc<Mutex<StoreWriter>>,
@@ -21,6 +21,7 @@ pub struct KvStore {
     rwmutex: Arc<std::sync::RwLock<()>>,
 }
 
+#[derive(Debug, Default)]
 struct StoreReader {
     dir: PathBuf,
     readers: Vec<BufReader<File>>,
@@ -35,11 +36,23 @@ impl Clone for StoreReader {
     }
 }
 
+#[derive(Debug)]
 struct StoreWriter {
     dir: PathBuf,
     writer: BufWriter<File>,
     max_segment_size: u64,
     curr_gen: u32,
+}
+
+impl Default for StoreWriter {
+    fn default() -> Self {
+        StoreWriter {
+            dir: PathBuf::new(),
+            writer: BufWriter::new(File::create("").unwrap()),
+            max_segment_size: INITIAL_MAX_SEGMENT_SIZE,
+            curr_gen: 0,
+        }
+    }
 }
 
 /// File format:
