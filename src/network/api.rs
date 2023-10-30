@@ -10,7 +10,7 @@ use web::Json;
 
 use crate::app::App;
 use crate::storage::Request;
-use crate::KvStore;
+use crate::InMemEngine;
 use crate::KvsEngine;
 use crate::NodeId;
 
@@ -25,7 +25,7 @@ use crate::NodeId;
  */
 #[post("/write")]
 pub async fn write(
-    app: Data<App<KvStore>>,
+    app: Data<App<InMemEngine>>,
     req: Json<Request>,
 ) -> actix_web::Result<impl Responder> {
     let response = app.raft.client_write(req.0).await;
@@ -33,7 +33,10 @@ pub async fn write(
 }
 
 #[post("/read")]
-pub async fn read(app: Data<App<KvStore>>, req: Json<String>) -> actix_web::Result<impl Responder> {
+pub async fn read(
+    app: Data<App<InMemEngine>>,
+    req: Json<String>,
+) -> actix_web::Result<impl Responder> {
     let state_machine = app.store.state_machine.read().await;
     let key = req.0;
     let value = state_machine.data.get(key.clone()).unwrap();
@@ -44,7 +47,7 @@ pub async fn read(app: Data<App<KvStore>>, req: Json<String>) -> actix_web::Resu
 
 #[post("/consistent_read")]
 pub async fn consistent_read(
-    app: Data<App<KvStore>>,
+    app: Data<App<InMemEngine>>,
     req: Json<String>,
 ) -> actix_web::Result<impl Responder> {
     let ret = app.raft.is_leader().await;

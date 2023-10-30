@@ -11,7 +11,7 @@ use openraft::BasicNode;
 use openraft::RaftMetrics;
 
 use crate::app::App;
-use crate::KvStore;
+use crate::InMemEngine;
 use crate::KvsEngine;
 use crate::NodeId;
 
@@ -24,7 +24,7 @@ use crate::NodeId;
 /// (by calling `change-membership`)
 #[post("/add-learner")]
 pub async fn add_learner(
-    app: Data<App<KvStore>>,
+    app: Data<App<InMemEngine>>,
     req: Json<(NodeId, String)>,
 ) -> actix_web::Result<impl Responder> {
     let node_id = req.0 .0;
@@ -38,7 +38,7 @@ pub async fn add_learner(
 /// Changes specified learners to members, or remove members.
 #[post("/change-membership")]
 pub async fn change_membership(
-    app: Data<App<KvStore>>,
+    app: Data<App<InMemEngine>>,
     req: Json<BTreeSet<NodeId>>,
 ) -> actix_web::Result<impl Responder> {
     let res = app.raft.change_membership(req.0, false).await;
@@ -47,7 +47,7 @@ pub async fn change_membership(
 
 /// Initialize a single-node cluster.
 #[post("/init")]
-pub async fn init(app: Data<App<KvStore>>) -> actix_web::Result<impl Responder> {
+pub async fn init(app: Data<App<InMemEngine>>) -> actix_web::Result<impl Responder> {
     let mut nodes = BTreeMap::new();
     nodes.insert(
         app.id,
@@ -61,7 +61,7 @@ pub async fn init(app: Data<App<KvStore>>) -> actix_web::Result<impl Responder> 
 
 /// Get the latest metrics of the cluster
 #[get("/metrics")]
-pub async fn metrics(app: Data<App<KvStore>>) -> actix_web::Result<impl Responder> {
+pub async fn metrics(app: Data<App<InMemEngine>>) -> actix_web::Result<impl Responder> {
     let metrics = app.raft.metrics().borrow().clone();
 
     let res: Result<RaftMetrics<NodeId, BasicNode>, Infallible> = Ok(metrics);

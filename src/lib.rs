@@ -5,7 +5,7 @@
 extern crate serde_derive;
 
 pub use client::KvsClient;
-pub use engines::{KvStore, KvsEngine, SledKvsEngine};
+pub use engines::{InMemEngine, KvStore, KvsEngine, SledKvsEngine};
 pub use error::Result;
 pub use server::KvsServer;
 pub use thread_pool::{NaiveThreadPool, RayonThreadPool, SharedQueueThreadPool, ThreadPool};
@@ -18,6 +18,7 @@ mod server;
 mod thread_pool;
 
 use std::io::Cursor;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use actix_web::middleware;
@@ -51,8 +52,8 @@ openraft::declare_raft_types!(
     Entry = openraft::Entry<TypeConfig>, SnapshotData = Cursor<Vec<u8>>, AsyncRuntime = TokioRuntime
 );
 
-pub type LogStore = Adaptor<TypeConfig, Arc<Store<KvStore>>>;
-pub type StateMachineStore = Adaptor<TypeConfig, Arc<Store<KvStore>>>;
+pub type LogStore = Adaptor<TypeConfig, Arc<Store<InMemEngine>>>;
+pub type StateMachineStore = Adaptor<TypeConfig, Arc<Store<InMemEngine>>>;
 pub type Raft = openraft::Raft<TypeConfig, Network, LogStore, StateMachineStore>;
 
 pub mod typ {
@@ -84,7 +85,8 @@ pub async fn start_example_raft_node(node_id: NodeId, http_addr: String) -> std:
 
     let config = Arc::new(config.validate().unwrap());
 
-    let kvengine = KvStore::open(format!("./raft-{}", node_id)).unwrap();
+    // let kvengine = KvStore::open(format!("./raft-{}", node_id)).unwrap();
+    let kvengine = InMemEngine::open(PathBuf::from("."));
 
     // Create a instance of where the Raft data will be stored.
     let store = Arc::new(Store::new(kvengine));

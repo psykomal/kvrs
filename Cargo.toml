@@ -42,6 +42,7 @@ tracing = "0.1.29"
 tracing-subscriber = { version = "0.3.0", features = ["env-filter"] }
 reqwest = { version = "0.11.9", features = ["json"] }
 async-trait = "0.1.36"
+crossbeam-skiplist = "0.1.1"
 
 [[bench]]
 name = "pool_bench"

@@ -7,7 +7,7 @@ use openraft::raft::InstallSnapshotRequest;
 use openraft::raft::VoteRequest;
 
 use crate::app::App;
-use crate::KvStore;
+use crate::InMemEngine;
 use crate::KvsEngine;
 use crate::NodeId;
 use crate::TypeConfig;
@@ -16,7 +16,7 @@ use crate::TypeConfig;
 
 #[post("/raft-vote")]
 pub async fn vote(
-    app: Data<App<KvStore>>,
+    app: Data<App<InMemEngine>>,
     req: Json<VoteRequest<NodeId>>,
 ) -> actix_web::Result<impl Responder> {
     let res = app.raft.vote(req.0).await;
@@ -25,7 +25,7 @@ pub async fn vote(
 
 #[post("/raft-append")]
 pub async fn append(
-    app: Data<App<KvStore>>,
+    app: Data<App<InMemEngine>>,
     req: Json<AppendEntriesRequest<TypeConfig>>,
 ) -> actix_web::Result<impl Responder> {
     let res = app.raft.append_entries(req.0).await;
@@ -34,7 +34,7 @@ pub async fn append(
 
 #[post("/raft-snapshot")]
 pub async fn snapshot(
-    app: Data<App<KvStore>>,
+    app: Data<App<InMemEngine>>,
     req: Json<InstallSnapshotRequest<TypeConfig>>,
 ) -> actix_web::Result<impl Responder> {
     let res = app.raft.install_snapshot(req.0).await;

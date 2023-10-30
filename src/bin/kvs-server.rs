@@ -63,6 +63,10 @@ fn main() -> Result<()> {
             let engine = kvs::SledKvsEngine::open(PathBuf::from(&cli.dir));
             run_with(engine, pool, cli.addr, cli.dir, logger);
         }
+        "inmem" => {
+            let engine = kvs::InMemEngine::open(PathBuf::from(&cli.dir));
+            run_with(engine, pool, cli.addr, cli.dir, logger);
+        }
         _ => panic!("Unknown engine"),
     };
 
