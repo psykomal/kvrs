@@ -1,10 +1,10 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use axum::{
     extract::{Query, State},
     http::StatusCode,
 };
-use little_raft::message::Message;
+use crossbeam_channel::select;
 
 use crate::{raft_server::App, DbOp, DbOpType, KvsEngine};
 
@@ -46,6 +46,7 @@ where
     };
 
     let tsn_tx = state.tsn_tx.lock().unwrap();
+    let applied_tsns_rx = state.applied_tsns_rx.clone();
     let id;
     {
         let mut next_id = state.counter.lock().unwrap();
@@ -67,11 +68,62 @@ where
 
     tsn_tx.send(()).expect("Unable to send message to raft");
 
-    let applied_tsns_rx = state.applied_tsns_rx.clone();
-    for applied_id in applied_tsns_rx.iter() {
-        if applied_id == id {
-            return Ok(StatusCode::OK);
+    loop {
+        select! {
+            recv(applied_tsns_rx) -> applied_id => {
+                if applied_id == Ok(id) {
+                    return Ok(StatusCode::OK);
+                }
+            },
+            default(Duration::from_secs(5)) => return Err(StatusCode::REQUEST_TIMEOUT),
         }
     }
-    Err(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+pub async fn handle_remove<K>(
+    Query(params): Query<HashMap<String, String>>,
+    State(state): State<Arc<App<K>>>,
+) -> Result<StatusCode, StatusCode>
+where
+    K: KvsEngine + Sync,
+{
+    let key = match params.get("key") {
+        Some(k) => k.to_owned(),
+        None => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    let tsn_tx = state.tsn_tx.lock().unwrap();
+    let applied_tsns_rx = state.applied_tsns_rx.clone();
+
+    let id;
+    {
+        let mut next_id = state.counter.lock().unwrap();
+        *next_id = *next_id + 1;
+        id = *next_id;
+    }
+
+    let op = DbOp {
+        id,
+        op_type: DbOpType::Delete(key),
+    };
+
+    state
+        .state_machine
+        .lock()
+        .unwrap()
+        .pending_transitions
+        .push(op);
+
+    tsn_tx.send(()).expect("Unable to send message to raft");
+
+    loop {
+        select! {
+            recv(applied_tsns_rx) -> applied_id => {
+                if applied_id == Ok(id) {
+                    return Ok(StatusCode::OK);
+                }
+            },
+            default(Duration::from_secs(5)) => return Err(StatusCode::REQUEST_TIMEOUT),
+        }
+    }
 }

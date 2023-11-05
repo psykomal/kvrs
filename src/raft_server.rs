@@ -100,6 +100,7 @@ pub async fn run_raft_node(node_id: usize, engine: &str, addr: SocketAddr, dir: 
     let app = Router::new()
         .route("/get", get(api::handle_get))
         .route("/set", get(api::handle_set))
+        .route("/rm", get(api::handle_remove))
         .with_state(state);
 
     axum::Server::bind(&addr)
