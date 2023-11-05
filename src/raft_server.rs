@@ -7,7 +7,7 @@ use std::{
 };
 
 use axum::{routing::get, Router};
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use little_raft::replica::Replica;
 
 use crate::{api, DbOp, DbOpType, KvStore, KvsEngine, Storage, StorageCluster};
@@ -25,6 +25,8 @@ pub struct App<K: KvsEngine + Sync> {
     pub cluster: Arc<Mutex<StorageCluster>>,
     pub msg_tx: Arc<Mutex<Sender<()>>>,
     pub tsn_tx: Arc<Mutex<Sender<()>>>,
+    pub applied_tsns_rx: Arc<Receiver<usize>>,
+    pub counter: Arc<Mutex<usize>>,
 }
 
 pub async fn run_raft_node(node_id: usize, engine: &str, addr: SocketAddr, dir: PathBuf) {
@@ -38,10 +40,13 @@ pub async fn run_raft_node(node_id: usize, engine: &str, addr: SocketAddr, dir: 
 
     let engine = KvStore::open(dir).unwrap();
 
+    let (applied_tsns_tx, applied_tsns_rx) = unbounded();
+
     // Create State Machine
     let state_machine = Storage {
         engine,
         pending_transitions: Vec::new(),
+        applied_transitions: applied_tsns_tx,
     };
 
     // Create Cluster
@@ -65,6 +70,8 @@ pub async fn run_raft_node(node_id: usize, engine: &str, addr: SocketAddr, dir: 
         cluster: Arc::new(Mutex::new(cluster)),
         msg_tx: Arc::new(Mutex::new(msg_tx)),
         tsn_tx: Arc::new(Mutex::new(tsn_tx)),
+        applied_tsns_rx: Arc::new(applied_tsns_rx),
+        counter: Arc::new(Mutex::new(1)),
     });
 
     // Start Raft node
@@ -92,6 +99,7 @@ pub async fn run_raft_node(node_id: usize, engine: &str, addr: SocketAddr, dir: 
 
     let app = Router::new()
         .route("/get", get(api::handle_get))
+        .route("/set", get(api::handle_set))
         .with_state(state);
 
     axum::Server::bind(&addr)

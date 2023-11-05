@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use bytes::Bytes;
+use crossbeam_channel::Sender;
 use little_raft::{
     cluster::Cluster,
     message::Message,
@@ -34,6 +35,7 @@ impl StateMachineTransition for DbOp {
 pub struct Storage<K: KvsEngine> {
     pub engine: K,
     pub pending_transitions: Vec<DbOp>,
+    pub applied_transitions: Sender<usize>,
 }
 
 impl<K> StateMachine<DbOp, Bytes> for Storage<K>
@@ -59,6 +61,11 @@ where
     ) {
         // Send IDs of applied transitions down the channel so we can confirm
         // they were applied in the right order.
+        if state == TransitionState::Applied {
+            self.applied_transitions
+                .send(transition_id)
+                .expect("could not send applied transition id");
+        }
     }
 
     fn get_pending_transitions(&mut self) -> Vec<DbOp> {
