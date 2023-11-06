@@ -6,7 +6,7 @@ extern crate serde_derive;
 pub use client::KvsClient;
 pub use engines::{KvStore, KvsEngine, SledKvsEngine};
 pub use error::Result;
-pub use raft::{api, DbOp, DbOpType, Node, Storage, StorageCluster};
+pub use raft::{api, network, DbOp, DbOpType, Node, Storage, StorageCluster};
 pub use raft_server::run_raft_node;
 pub use server::KvsServer;
 pub use thread_pool::{NaiveThreadPool, RayonThreadPool, SharedQueueThreadPool, ThreadPool};

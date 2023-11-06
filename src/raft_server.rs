@@ -6,11 +6,14 @@ use std::{
     time::Duration,
 };
 
-use axum::{routing::get, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use little_raft::replica::Replica;
 
-use crate::{api, DbOp, DbOpType, KvStore, KvsEngine, Storage, StorageCluster};
+use crate::{api, raft::network, DbOp, DbOpType, KvStore, KvsEngine, Storage, StorageCluster};
 
 const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(500);
 const MIN_ELECTION_TIMEOUT: Duration = Duration::from_millis(750);
@@ -101,6 +104,7 @@ pub async fn run_raft_node(node_id: usize, engine: &str, addr: SocketAddr, dir: 
         .route("/get", get(api::handle_get))
         .route("/set", get(api::handle_set))
         .route("/rm", get(api::handle_remove))
+        .route("/msg", post(network::handle_msg))
         .with_state(state);
 
     axum::Server::bind(&addr)
