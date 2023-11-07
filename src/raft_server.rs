@@ -13,7 +13,9 @@ use axum::{
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use little_raft::replica::Replica;
 
-use crate::{api, raft::network, DbOp, DbOpType, KvStore, KvsEngine, Storage, StorageCluster};
+use crate::{
+    api, raft::network, DbOp, DbOpType, KvStore, KvsEngine, Node, Storage, StorageCluster,
+};
 
 const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(500);
 const MIN_ELECTION_TIMEOUT: Duration = Duration::from_millis(750);
@@ -32,14 +34,37 @@ pub struct App<K: KvsEngine + Sync> {
     pub counter: Arc<Mutex<usize>>,
 }
 
-pub async fn run_raft_node(node_id: usize, engine: &str, addr: SocketAddr, dir: PathBuf) {
+pub async fn run_raft_node(
+    node_id: usize,
+    engine: &str,
+    addr: SocketAddr,
+    dir: PathBuf,
+    is_leader: bool,
+) {
     // Create KV Engine
 
     let noop = DbOp {
         id: 0,
         op_type: DbOpType::Noop,
     };
-    let peers = vec![];
+    let mut peers = vec![
+        Node {
+            id: 1,
+            addr: "127.0.0.1:4001".parse().unwrap(),
+        },
+        Node {
+            id: 2,
+            addr: "127.0.0.1:4002".parse().unwrap(),
+        },
+        Node {
+            id: 3,
+            addr: "127.0.0.1:4003".parse().unwrap(),
+        },
+    ];
+    peers = peers
+        .into_iter()
+        .filter(|node| node.id != node_id)
+        .collect();
 
     let engine = KvStore::open(dir).unwrap();
 
@@ -55,7 +80,7 @@ pub async fn run_raft_node(node_id: usize, engine: &str, addr: SocketAddr, dir: 
     // Create Cluster
     let cluster = StorageCluster {
         id: node_id,
-        is_leader: false,
+        is_leader: is_leader,
         peers: peers.clone(),
         pending_messages: Vec::new(),
         halt: false,
@@ -104,10 +129,7 @@ pub async fn run_raft_node(node_id: usize, engine: &str, addr: SocketAddr, dir: 
         .route("/get", get(api::handle_get))
         .route("/set", get(api::handle_set))
         .route("/rm", get(api::handle_remove))
-        .route(
-            "/appendentryreq",
-            post(network::handle_append_entry_request),
-        )
+        .route("/msg", post(network::handle_msg))
         .with_state(state);
 
     axum::Server::bind(&addr)

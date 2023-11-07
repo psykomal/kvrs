@@ -32,10 +32,17 @@ where
 pub async fn handle_set<K>(
     Query(params): Query<HashMap<String, String>>,
     State(state): State<Arc<App<K>>>,
-) -> Result<StatusCode, StatusCode>
+) -> Result<String, StatusCode>
 where
     K: KvsEngine + Sync,
 {
+    {
+        let cluster = state.cluster.lock().unwrap();
+        if !cluster.is_leader {
+            return Ok("Not leader".to_string());
+        }
+    }
+
     let key = match params.get("key") {
         Some(k) => k.to_owned(),
         None => return Err(StatusCode::BAD_REQUEST),
@@ -72,7 +79,7 @@ where
         select! {
             recv(applied_tsns_rx) -> applied_id => {
                 if applied_id == Ok(id) {
-                    return Ok(StatusCode::OK);
+                    return Ok("OK".to_string());
                 }
             },
             default(Duration::from_secs(5)) => return Err(StatusCode::REQUEST_TIMEOUT),

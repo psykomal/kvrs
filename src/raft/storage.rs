@@ -13,6 +13,8 @@ use little_raft::{
 
 use crate::KvsEngine;
 
+use super::client;
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Serialize, Deserialize)]
 pub enum DbOpType {
     Set(String, String),
@@ -122,7 +124,11 @@ impl Cluster<DbOp, Bytes> for StorageCluster {
         }
     }
 
-    fn send_message(&mut self, to_id: usize, message: Message<DbOp, Bytes>) {}
+    fn send_message(&mut self, to_id: usize, message: Message<DbOp, Bytes>) {
+        let node = self.peers.iter().find(|node| node.id == to_id).unwrap();
+
+        client::send_message(node, message);
+    }
 
     fn halt(&self) -> bool {
         self.halt

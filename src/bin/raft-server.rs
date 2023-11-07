@@ -8,6 +8,7 @@ use std::{
 };
 
 use ::clap::{Args, Parser, Subcommand};
+use clap::ArgAction;
 use kvs::{
     run_raft_node, KvsEngine, KvsServer, NaiveThreadPool, RayonThreadPool, Result,
     SharedQueueThreadPool, ThreadPool,
@@ -27,6 +28,8 @@ struct Cli {
     engine: String,
     #[arg(short, long, default_value = ".")]
     dir: String,
+    #[arg(short, long, action = ArgAction::SetTrue, default_value = "false")]
+    leader: bool,
 }
 
 #[tokio::main]
@@ -53,6 +56,7 @@ async fn main() {
         cli.engine.as_str(),
         SocketAddr::from(cli.addr),
         PathBuf::from(cli.dir),
+        cli.leader,
     )
     .await;
 }
