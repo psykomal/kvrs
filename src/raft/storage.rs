@@ -1,5 +1,7 @@
 use std::net::SocketAddr;
 
+use axum::Json;
+use axum_macros::FromRequest;
 use bytes::Bytes;
 use crossbeam_channel::Sender;
 use little_raft::{
@@ -11,14 +13,14 @@ use little_raft::{
 
 use crate::KvsEngine;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Serialize, Deserialize)]
 pub enum DbOpType {
     Set(String, String),
     Delete(String),
     Noop,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Serialize, Deserialize)]
 pub struct DbOp {
     pub id: usize,
     pub op_type: DbOpType,

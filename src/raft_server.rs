@@ -104,7 +104,10 @@ pub async fn run_raft_node(node_id: usize, engine: &str, addr: SocketAddr, dir: 
         .route("/get", get(api::handle_get))
         .route("/set", get(api::handle_set))
         .route("/rm", get(api::handle_remove))
-        .route("/msg", post(network::handle_msg))
+        .route(
+            "/appendentryreq",
+            post(network::handle_append_entry_request),
+        )
         .with_state(state);
 
     axum::Server::bind(&addr)

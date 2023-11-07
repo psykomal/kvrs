@@ -26,6 +26,7 @@ clap = { version = "4.4.6", features = ["derive", "env"] }
 crossbeam = "0.8.2"
 crossbeam-channel = "0.5.8"
 failure = "0.1.8"
+hyper = "0.14.27"
 little_raft = "0.2.0"
 num_cpus = "1.16.0"
 rayon = "1.8.0"

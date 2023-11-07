@@ -838,6 +838,7 @@ dependencies = [
  "crossbeam-channel",
  "crossbeam-utils 0.6.6",
  "failure",
+ "hyper",
  "little_raft",
  "num_cpus",
  "panic-control",
