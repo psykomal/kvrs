@@ -20,6 +20,7 @@ pub trait KvsEngine: Clone + Send + 'static {
     fn remove(&self, key: String) -> Result<()>;
 }
 
+pub mod inmem;
 pub mod kvs;
 pub mod sled_kvs;
 

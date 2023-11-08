@@ -11,7 +11,7 @@ pub fn send_message(node: &Node, message: Message<DbOp, Bytes>) {
 
     let msg = Msg::from(message);
 
-    let msg_body = serde_json::to_string(&msg).unwrap();
+    // let msg_body = serde_json::to_string(&msg).unwrap();
 
     let mut ub = URLBuilder::new();
 
@@ -22,10 +22,10 @@ pub fn send_message(node: &Node, message: Message<DbOp, Bytes>) {
 
     let url = ub.build();
 
-    let echo_json = reqwest::blocking::Client::new()
-        .post(url)
-        .body(msg_body)
-        .send();
+    let echo_json = reqwest::blocking::Client::new().post(url).json(&msg).send();
 
-    println!("{:?} {:?}", msg, echo_json);
+    println!(
+        "Sending message to id_{} {:?} \n response : {:?}",
+        node.id, msg, echo_json
+    );
 }

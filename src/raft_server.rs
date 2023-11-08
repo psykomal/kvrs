@@ -14,7 +14,8 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use little_raft::replica::Replica;
 
 use crate::{
-    api, raft::network, DbOp, DbOpType, KvStore, KvsEngine, Node, Storage, StorageCluster,
+    api, engines::inmem::InMemEngine, raft::network, DbOp, DbOpType, KvStore, KvsEngine, Node,
+    Storage, StorageCluster,
 };
 
 const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(500);
@@ -28,8 +29,8 @@ pub struct App<K: KvsEngine + Sync> {
     pub addr: String,
     pub state_machine: Arc<Mutex<Storage<K>>>,
     pub cluster: Arc<Mutex<StorageCluster>>,
-    pub msg_tx: Arc<Mutex<Sender<()>>>,
-    pub tsn_tx: Arc<Mutex<Sender<()>>>,
+    pub msg_tx: Arc<Sender<()>>,
+    pub tsn_tx: Arc<Sender<()>>,
     pub applied_tsns_rx: Arc<Receiver<usize>>,
     pub counter: Arc<Mutex<usize>>,
 }
@@ -56,17 +57,17 @@ pub async fn run_raft_node(
             id: 2,
             addr: "127.0.0.1:4002".parse().unwrap(),
         },
-        Node {
-            id: 3,
-            addr: "127.0.0.1:4003".parse().unwrap(),
-        },
+        // Node {
+        //     id: 3,
+        //     addr: "127.0.0.1:4003".parse().unwrap(),
+        // },
     ];
     peers = peers
         .into_iter()
         .filter(|node| node.id != node_id)
         .collect();
 
-    let engine = KvStore::open(dir).unwrap();
+    let engine = InMemEngine::open(PathBuf::from(""));
 
     let (applied_tsns_tx, applied_tsns_rx) = unbounded();
 
@@ -96,8 +97,8 @@ pub async fn run_raft_node(
         addr: addr.to_string(),
         state_machine: Arc::new(Mutex::new(state_machine)),
         cluster: Arc::new(Mutex::new(cluster)),
-        msg_tx: Arc::new(Mutex::new(msg_tx)),
-        tsn_tx: Arc::new(Mutex::new(tsn_tx)),
+        msg_tx: Arc::new(msg_tx),
+        tsn_tx: Arc::new(tsn_tx),
         applied_tsns_rx: Arc::new(applied_tsns_rx),
         counter: Arc::new(Mutex::new(1)),
     });

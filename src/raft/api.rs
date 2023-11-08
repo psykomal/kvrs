@@ -36,11 +36,9 @@ pub async fn handle_set<K>(
 where
     K: KvsEngine + Sync,
 {
-    {
-        let cluster = state.cluster.lock().unwrap();
-        if !cluster.is_leader {
-            return Ok("Not leader".to_string());
-        }
+    let cluster = state.cluster.lock().unwrap();
+    if !cluster.is_leader {
+        return Ok("Not leader".to_string());
     }
 
     let key = match params.get("key") {
@@ -52,28 +50,27 @@ where
         None => return Err(StatusCode::BAD_REQUEST),
     };
 
-    let tsn_tx = state.tsn_tx.lock().unwrap();
+    let tsn_tx = state.tsn_tx.clone();
     let applied_tsns_rx = state.applied_tsns_rx.clone();
-    let id;
-    {
-        let mut next_id = state.counter.lock().unwrap();
-        *next_id = *next_id + 1;
-        id = *next_id;
-    }
+
+    let mut next_id = state.counter.lock().unwrap();
+    *next_id = *next_id + 1;
+    let id = *next_id;
 
     let op = DbOp {
         id,
         op_type: DbOpType::Set(key, val),
     };
 
-    state
-        .state_machine
-        .lock()
-        .unwrap()
-        .pending_transitions
-        .push(op);
-
-    tsn_tx.send(()).expect("Unable to send message to raft");
+    {
+        state
+            .state_machine
+            .lock()
+            .unwrap()
+            .pending_transitions
+            .push(op);
+    }
+    tsn_tx.send(()).expect("Unable to send transition to raft");
 
     loop {
         select! {
@@ -82,7 +79,7 @@ where
                     return Ok("OK".to_string());
                 }
             },
-            default(Duration::from_secs(5)) => return Err(StatusCode::REQUEST_TIMEOUT),
+            default(Duration::from_secs(10)) => return Err(StatusCode::REQUEST_TIMEOUT),
         }
     }
 }
@@ -99,7 +96,7 @@ where
         None => return Err(StatusCode::BAD_REQUEST),
     };
 
-    let tsn_tx = state.tsn_tx.lock().unwrap();
+    let tsn_tx = state.tsn_tx.clone();
     let applied_tsns_rx = state.applied_tsns_rx.clone();
 
     let id;
@@ -114,12 +111,14 @@ where
         op_type: DbOpType::Delete(key),
     };
 
-    state
-        .state_machine
-        .lock()
-        .unwrap()
-        .pending_transitions
-        .push(op);
+    {
+        state
+            .state_machine
+            .lock()
+            .unwrap()
+            .pending_transitions
+            .push(op);
+    }
 
     tsn_tx.send(()).expect("Unable to send message to raft");
 

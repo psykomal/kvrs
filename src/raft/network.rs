@@ -30,11 +30,17 @@ where
 {
     let message = Message::<DbOp, Bytes>::from(msg);
 
-    let mut cluster = state.cluster.lock().unwrap();
+    println!("\n\nReceived Message {:?}\n\n", message);
 
-    cluster.pending_messages.push(message);
+    {
+        let mut cluster = state.cluster.lock().unwrap();
 
-    println!("Here I am!");
+        cluster.pending_messages.push(message);
+    }
+
+    let msg_tx = state.msg_tx.clone();
+
+    msg_tx.send(()).expect("Unable to send message");
 
     Ok("".to_string())
 }
