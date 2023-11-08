@@ -1020,8 +1020,6 @@ checksum = "3852614a3bd9ca9804678ba6be5e3b8ce76dfc902cae004e3e0c44051b6e88db"
 [[package]]
 name = "little_raft"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c283d5eb11c410371be6bd74e8c039d444eb62430721a65c13746a0238ab2995"
 dependencies = [
  "bytes 0.4.12",
  "crossbeam",

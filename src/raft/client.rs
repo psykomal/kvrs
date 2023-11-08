@@ -24,8 +24,8 @@ pub fn send_message(node: &Node, message: Message<DbOp, Bytes>) {
 
     let echo_json = reqwest::blocking::Client::new().post(url).json(&msg).send();
 
-    println!(
-        "Sending message to id_{} {:?} \n response : {:?}",
-        node.id, msg, echo_json
-    );
+    // println!(
+    //     "\nSending message to id_{} {:?} \n response : {:?}",
+    //     node.id, msg, echo_json
+    // );
 }

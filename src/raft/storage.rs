@@ -10,6 +10,7 @@ use little_raft::{
     replica::Replica,
     state_machine::{Snapshot, StateMachine, StateMachineTransition, TransitionState},
 };
+use tokio::sync::broadcast;
 
 use crate::KvsEngine;
 
@@ -39,7 +40,7 @@ impl StateMachineTransition for DbOp {
 pub struct Storage<K: KvsEngine> {
     pub engine: K,
     pub pending_transitions: Vec<DbOp>,
-    pub applied_transitions: Sender<usize>,
+    pub applied_transitions: broadcast::Sender<usize>,
 }
 
 impl<K> StateMachine<DbOp, Bytes> for Storage<K>
@@ -113,6 +114,7 @@ pub struct StorageCluster {
 
 impl Cluster<DbOp, Bytes> for StorageCluster {
     fn register_leader(&mut self, leader_id: Option<usize>) {
+        // println!("registered leader as {}", leader_id.unwrap_or(0));
         if let Some(id) = leader_id {
             if id == self.id {
                 self.is_leader = true;
