@@ -20,7 +20,7 @@
 - [ ] Bring in Async Rust for engine
 - [ ] Convert little-raft to be async
 
-### Testing Raft 
+### Testing the Distributed KV Store
 
 1. Run the cmds in different terminals
 ```
