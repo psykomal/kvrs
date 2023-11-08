@@ -31,9 +31,9 @@ cargo run --bin raft-server -- --id 3 --addr 127.0.0.1:4003
 
 2. Wait for them to establish a leader
 
-3. Fire REST API calls to the leader
+3. Fire REST API calls:
 
-Set Key :
+Set Key (to the leader):
 ```curl
 GET /set?key=k2&val=v12 HTTP/1.1
 Host: 127.0.0.1:4001
@@ -41,7 +41,7 @@ Connection: close
 User-Agent: RapidAPI/4.2.0 (Macintosh; OS X/14.1.0) GCDHTTPRequest
 ```
 
-Get Key :
+Get Key (to any node):
 ```curl
 GET /get?key=k2 HTTP/1.1
 Host: 127.0.0.1:4003
